@@ -82,9 +82,9 @@ if df_users is not None:
                     if pd.notna(raw_pwd) and str(raw_pwd).strip() != "" and str(raw_pwd).lower() != "nan":
                         correct_pwd = str(raw_pwd).strip()
                     else:
-                        correct_pwd = str(user_row["Student ID(永久ID)"]).strip()
+                        correct_pwd = str(user_row["Student ID(預設密碼)"]).strip()
                 except:
-                    correct_pwd = str(user_row["Student ID(永久ID)"]).strip()
+                    correct_pwd = str(user_row["Student ID(預設密碼)"]).strip()
 
                 if input_pwd.strip() == correct_pwd:
                     st.session_state.login = True
@@ -100,13 +100,13 @@ if df_users is not None:
         display_name = user["Nickname(變更暱稱)"] if pd.notna(user["Nickname(變更暱稱)"]) and str(user["Nickname(變更暱稱)"]).strip() != "" else user["name(姓名)"]
         
         st.title(f"📝 {display_name} 今天拍了沒📸")
-        st.markdown(f"<p style='color: #8C8C8C; font-size: 0.8rem; margin-top:-15px;'>特工 ID: {user['Student ID(永久ID)']}</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='color: #8C8C8C; font-size: 0.8rem; margin-top:-15px;'>特工 ID: {user['Student ID(預設密碼)']}</p>", unsafe_allow_html=True)
 
         # 【第一區：我的觀察記憶庫 (個人化照片牆)】
-        st.subheader("🖼️ 我的觀察記憶庫")
+        st.subheader("🖼️任務照片記錄")
         photo_val = user.get("photo_list")
         if pd.isna(photo_val) or str(photo_val).strip() == "" or str(photo_val).lower() == "nan":
-            st.info("🌑 尚未完成任何一項任務，等待特工回傳情報...")
+            st.info("🌑 尚未完成任何一項任務，現在拍一張吧...")
         else:
             p_urls = str(photo_val).split(",")
             t_names = str(user.get("task_list", "")).split(",")
@@ -124,7 +124,7 @@ if df_users is not None:
         st.write("---")
 
         # 【第二區：任務與進度分頁】
-        tab1, tab2, tab3 = st.tabs(["🎯 任務派遣", "📊 進度結算", "⚙️ 個人設定"])
+        tab1, tab2, tab3 = st.tabs(["🎯任務挑選", "📊進度瀏覽", "⚙️設定"])
 
         with tab1:
             st.write("點擊級別切換查閱區域：")
@@ -151,7 +151,7 @@ if df_users is not None:
                             st.toast(f"已鎖定目標：{task['title']}")
 
         with tab2:
-            st.subheader("🎁 抽獎券結算進度")
+            st.subheader("🎁抽獎券結算進度")
             for lvl in ["A", "B", "C", "D", "E"]:
                 count = int(user.get(f"done_{lvl}", 0))
                 # 顯示各難度的 n/5 進度感
@@ -159,10 +159,10 @@ if df_users is not None:
                 st.progress(min(count/5, 1.0))
             
             total = calculate_total_tickets(user)
-            st.metric("當前可獲得抽獎券總數", f"{total} 張")
+            st.metric("當前獲得抽獎券總數", f"{total} 張")
 
         with tab3:
-            st.subheader("⚙️ 檔案維護")
+            st.subheader("⚙️檔案維護")
             new_nick = st.text_input("更換暱稱", value=user["Nickname(變更暱稱)"] if pd.notna(user["Nickname(變更暱稱)"]) else "")
             new_pwd = st.text_input("修改自訂密碼 (若不修改請留空)", type="password")
             if st.button("同步至總部檔案"):
@@ -171,7 +171,7 @@ if df_users is not None:
     # 側邊欄固定顯示
     if st.session_state.login:
         with st.sidebar:
-            st.markdown("### 📍 目前鎖定任務")
+            st.markdown("### 📍目前選定任務")
             st.info(st.session_state.current_task)
 
 else:
