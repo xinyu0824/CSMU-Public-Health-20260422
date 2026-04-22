@@ -53,7 +53,7 @@ df_users = load_data(USER_CSV)
 df_tasks = load_data(TASK_CSV)
 
 if df_users is not None:
-    # A. 登入介面
+# A. 登入介面
     if not st.session_state.login:
         st.title("🍂 拍照觀察員：身分登入")
         name_list = df_users["name(姓名)"].dropna().tolist()
@@ -63,15 +63,31 @@ if df_users is not None:
         if st.button("確認進入"):
             match = df_users[df_users["name(姓名)"] == selected_name]
             if not match.empty:
-                # 安全讀取邏輯：如果找不到 password 欄位，就用預設學號，且不崩潰
+                user_info = match.iloc[0]
+                
+                # --- 這裡就是修正後的安全讀取邏輯 ---
                 try:
-                    # 嘗試抓取自訂密碼
+                    # 嘗試從「password(自訂密碼)」欄位拿資料
                     raw_pwd = user_info.get("password(自訂密碼)", None)
-                    # 如果欄位存在且有內容，就用它；否則回退到學號
-        if pd.notna(raw_pwd) and str(raw_pwd).strip() != "":
-            correct_pwd = str(raw_pwd).strip()
-        else:
-            correct_pwd = str(user_info["Student ID(永久ID)"]).strip()
+                    
+                    # 判斷拿到的東西是不是空的
+                    if pd.notna(raw_pwd) and str(raw_pwd).strip() != "" and str(raw_pwd).lower() != "nan":
+                        correct_pwd = str(raw_pwd).strip()
+                    else:
+                        # 如果是空的，回退到預設的「Student ID(永久ID)」
+                        correct_pwd = str(user_info["Student ID(永久ID)"]).strip()
+                except Exception:
+                    # 如果連嘗試都失敗（例如欄位不存在），就直接用預設學號
+                    correct_pwd = str(user_info["Student ID(永久ID)"]).strip()
+                # ----------------------------------
+
+                if input_pwd.strip() == correct_pwd:
+                    st.session_state.login = True
+                    st.session_state.user_info = user_info
+                    st.rerun()
+                else:
+                    st.error("密碼錯誤，請重新確認。")
+
             
 except KeyError:
     # 如果連欄位都找不到，直接用學號
