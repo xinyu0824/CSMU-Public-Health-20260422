@@ -2,117 +2,147 @@ import streamlit as st
 import pandas as pd
 import random
 
-# --- 1. 網頁質感設定 ---
-st.set_page_config(page_title="📸 拍拍挑戰", layout="centered")
+# --- 1. 網頁質感設定 (Muji 暖米色調) ---
+st.set_page_config(page_title="📸 拍拍挑戰：特工觀察", layout="centered")
 st.markdown("""
     <style>
     .stApp { background-color: #F5F5F0; }
     h1, h2, h3, p, label { color: #5F5F5F !important; font-family: 'Noto Sans TC', sans-serif; }
-    .mission-frame { border: 2px solid #D9D9D9; border-radius: 8px; padding: 20px; margin-bottom: 25px; background-color: #FFFFFF; }
-    .gallery-item { background-color: white; border: 1px solid #E6E6E1; padding: 5px; box-shadow: 2px 2px 5px rgba(0,0,0,0.03); }
-    .gallery-text { font-size: 0.65rem; color: #8C8C8C; text-align: center; margin-top: 4px; }
+    .task-box { background-color: #FFFFFF; padding: 20px; border: 1px solid #E6E6E1; border-radius: 4px; margin-bottom: 15px; }
+    .stButton>button { background-color: #FFFFFF; color: #5F5F5F; border: 1px solid #D9D9D9; border-radius: 2px; }
+    
+    /* 照片牆不規則排列效果 */
+    .gallery-container { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 20px; }
+    .gallery-item { background-color: white; border: 1px solid #E6E6E1; padding: 5px; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); }
+    .gallery-text { font-size: 0.7rem; color: #8C8C8C; text-align: center; margin-top: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 資料讀取 ---
+# --- 2. 資料讀取設定 ---
 SHEET_ID = "1cxSA5qvLKmu2FjYR2xZI3fdSocXS_VCOXYUdk6C0YVA"
 USER_CSV = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=users"
 TASK_CSV = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=tasks"
 
-@st.cache_data(ttl=5) # 縮短快取時間，讓更新更有感
+@st.cache_data(ttl=10)
 def load_data(url):
-    try: return pd.read_csv(url)
-    except: return None
+    try:
+        return pd.read_csv(url)
+    except:
+        return None
 
-df_users = load_data(USER_CSV)
-df_tasks = load_data(TASK_CSV)
+# --- 3. 核心邏輯：抽獎券計算機 ---
+def calculate_tickets(a, b, c, d, e):
+    # 依照妳的要求：A:5/1, B:3/1, C:2/1, D:1/1, E:1/2
+    tickets = (a // 5) + (b // 3) + (c // 2) + (d * 1) + (e * 2)
+    return int(tickets)
 
-# --- 3. 初始化 Session ---
+# --- 4. 初始化 Session ---
 if 'login' not in st.session_state:
-    st.session_state.update({'login': False, 'current_task': "尚未領取任務", 'user_data': None})
+    st.session_state.login = False
+    st.session_state.current_task = "尚未領取任務"
 
-# --- 4. 登入邏輯 ---
+# --- 5. 程式主邏輯 ---
+df_users = load_data(USER_CSV)
+
 if df_users is not None:
+    COL_NAME = "name(姓名)"
+    COL_ID = "Student ID(預設密碼)"
+    COL_NICK = "Nickname(變更暱稱)"
+
     if not st.session_state.login:
-        st.title("🍂 觀察員登入")
-        name_list = df_users["name(姓名)"].dropna().tolist()
-        selected_name = st.selectbox("帳號", ["搜尋名字"] + name_list)
-        input_pwd = st.text_input("密碼", type="password")
+        st.title("🍂 拍照觀察員：身分登入")
+        name_list = df_users[COL_NAME].dropna().tolist()
+        selected_name = st.selectbox("帳號（預設為姓名）", ["搜尋名字"] + name_list)
+        input_pwd = st.text_input("密碼（預設為學號）", type="password")
+
         if st.button("確認進入"):
-            user_info = df_users[df_users["name(姓名)"] == selected_name].iloc[0]
-            if input_pwd.strip() == str(user_info["Student ID(預設密碼)"]).strip():
+            user_info = df_users[df_users[COL_NAME] == selected_name].iloc[0]
+            if input_pwd.strip() == str(user_info[COL_ID]).strip():
                 st.session_state.login = True
-                st.session_state.user_data = user_info
+                st.session_state.real_name = selected_name
+                st.session_state.student_id = user_info[COL_ID]
+                nick = user_info[COL_NICK]
+                st.session_state.nickname = "" if pd.isna(nick) else str(nick)
                 st.rerun()
-    
-    # --- 5. 登入後介面 ---
+            else:
+                st.error("密碼錯誤")
+
     else:
-        user = st.session_state.user_data
-        nickname = user["Nickname(變更暱稱)"]
-        display_name = nickname if pd.notna(nickname) and str(nickname).strip() != "" else user["name(姓名)"]
+        # 已登入介面
+        display_name = st.session_state.nickname if st.session_state.nickname.strip() != "" else st.session_state.real_name
+        st.title(f"📝 {display_name} 今天拍了沒📸")
         
-        st.title(f"📝 {display_name} 的特工空間")
+        # --- [新增] 照片拼貼牆區域 (不須向下滑，放在最上方) ---
+        # 這裡假設未來從 Google Sheet 讀取到的任務照片 (示範用)
+        # 每一項是 (任務簡稱, 圖片網址)
+        completed_photos = [
+            ("白鞋陣列", "https://via.placeholder.com/150/EBEBE6/5F5F5F?text=TASK+1"),
+            ("制式補給", "https://via.placeholder.com/150/E6E6E1/5F5F5F?text=TASK+2"),
+            ("學術分歧", "https://via.placeholder.com/180/F0F0EB/5F5F5F?text=TASK+3"),
+            ("酒精防線", "https://via.placeholder.com/140/EBEBE6/5F5F5F?text=TASK+4"),
+        ]
+        
+        st.write("🖼️ 我的觀察記憶庫")
+        cols = st.columns([1, 1.2, 0.8, 1.1]) # 不規則寬度創造隨機感
+        for i, (task_name, img_url) in enumerate(completed_photos):
+            with cols[i % 4]:
+                st.markdown(f"""
+                    <div class="gallery-item">
+                        <img src="{img_url}" style="width: 100%; height: auto; border-radius: 2px;">
+                        <div class="gallery-text">{task_name}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+        
+        st.write("---")
 
-        # 【功能一：動態不規則照片牆】
-        # 檢查是否有照片數據 (假設欄位名為 photo_list)
-        if "photo_list" in user and pd.notna(user["photo_list"]):
-            photos = str(user["photo_list"]).split(",")
-            st.write("🖼️ 過去觀察紀錄")
-            cols = st.columns([1, 1.2, 0.9, 1.1])
-            for i, p_url in enumerate(photos):
-                with cols[i % 4]:
-                    st.markdown(f'<div class="gallery-item"><img src="{p_url.strip()}" style="width:100%; border-radius:2px;"></div>', unsafe_allow_html=True)
-            st.write("---")
+        tab1, tab2, tab3 = st.tabs(["🎯 領取任務", "🎁 抽獎進度", "⚙️ 個人設定"])
 
-        tab1, tab2, tab3 = st.tabs(["🎯 領取任務", "🎁 進度結算", "⚙️ 個人設定"])
-
-        # 【功能二：分級框格任務】
         with tab1:
-            difficulty_map = {
-                "A": "【初級滲透】 (5任務/1券)", "B": "【進階觀察】 (3任務/1券)",
-                "C": "【深度諜對諜】 (2任務/1券)", "D": "【極限衝突】 (1任務/1券)", "E": "【傳奇成就】 (1任務/2券)"
-            }
-            for level, label in difficulty_map.items():
-                level_tasks = df_tasks[df_tasks['difficulty'] == level]
-                with st.container():
-                    st.markdown(f'<div class="mission-frame"><h3>{label}</h3>', unsafe_allow_html=True)
-                    if not level_tasks.empty:
-                        for _, t in level_tasks.iterrows():
-                            c1, c2 = st.columns([4, 1])
-                            c1.markdown(f"**{t['title']}**")
-                            c1.caption(t['content'])
-                            if c2.button("選定", key=f"{level}_{t['title']}"):
-                                st.session_state.current_task = f"【{t['title']}】\n{t['content']}"
-                                st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
+            st.subheader("選擇滲透等級")
+            # 5 級難度選擇
+            level = st.selectbox("難度分級", [
+                "A：【初級滲透】 (5任務換1券)",
+                "B：【進階觀察】 (3任務換1券)",
+                "C：【深度諜對諜】 (2任務換1券)",
+                "D：【極限衝突】 (1任務換1券)",
+                "E：【傳奇成就】 (1任務換2券)"
+            ])
+            
+            if st.button("🎲 隨機抽取任務"):
+                df_tasks = load_data(TASK_CSV)
+                if df_tasks is not None:
+                    target_diff = level[0] # 抓取 A, B, C, D, E
+                    filtered = df_tasks[df_tasks['difficulty'] == target_diff]
+                    if not filtered.empty:
+                        pick = filtered.sample(n=1).iloc[0]
+                        st.session_state.current_task = f"【{pick['title']}】\n{pick['content']}"
+                    else:
+                        st.warning(f"任務池中尚無 {target_diff} 級任務")
+            
+            st.markdown(f"""
+                <div class="task-box">
+                    <p style="font-size: 0.8rem; color: #8C8C8C; margin: 0;">當前領取任務</p>
+                    <h3 style="margin: 10px 0;">{st.session_state.current_task}</h3>
+                </div>
+            """, unsafe_allow_html=True)
 
-        # 【功能三：分級進度顯示】
         with tab2:
-            st.subheader("📊 各級滲透進度")
-            # 讀取 Google Sheets 中的各級完成數，若無則預設 0
-            prog = {
-                "A": int(user.get("done_A", 0)), "B": int(user.get("done_B", 0)),
-                "C": int(user.get("done_C", 0)), "D": int(user.get("done_D", 0)), "E": int(user.get("done_E", 0))
-            }
+            st.subheader("抽獎結算")
+            # 這裡假設從 df_users 讀取到的數值
+            # 妳可以在 Google Sheet 增加 done_A, done_B 等欄位
+            a, b, c, d, e = 5, 3, 0, 1, 0 # 範例數據
+            total_tickets = calculate_tickets(a, b, c, d, e)
             
-            # 顯示各級進度條
-            st.write(f"A級：{prog['A']}/5")
-            st.progress(min(prog['A']/5, 1.0))
-            st.write(f"B級：{prog['B']}/3")
-            st.progress(min(prog['B']/3, 1.0))
-            st.write(f"C級：{prog['C']}/2")
-            st.progress(min(prog['C']/2, 1.0))
-            
-            # 計算總票數
-            tickets = (prog['A']//5) + (prog['B']//3) + (prog['C']//2) + prog['D'] + (prog['E']*2)
-            st.metric("當前累計抽獎券", f"{tickets} 張")
+            st.metric("當前可領取抽獎券", f"{total_tickets} 張")
+            st.write(f"進度：A級({a}) B級({b}) C級({c}) D級({d}) E級({e})")
+            st.progress(min((a+b+c+d+e)/20, 1.0), text="特工積分累積中")
 
         with tab3:
-            st.write(f"真實姓名：{user['name(姓名)']}")
-            st.info("若需永久修改暱稱或上傳照片，請聯繫班代。")
+            st.subheader("帳號設定")
+            new_nick = st.text_input("更換暱稱", value=st.session_state.nickname)
+            if st.button("確認修改"):
+                st.session_state.nickname = new_nick
+                st.rerun()
 
-# --- 側邊欄固定顯示當前目標 ---
-if st.session_state.login:
-    with st.sidebar:
-        st.markdown("### 📍 當前鎖定任務")
-        st.info(st.session_state.current_task)
+else:
+    st.error("連線資料庫失敗")
