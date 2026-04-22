@@ -2,132 +2,147 @@ import streamlit as st
 import pandas as pd
 import random
 
-# --- 1. 網頁畫面設定 (Muji 質感) ---
-st.set_page_config(page_title="📸 拍拍挑戰", layout="centered")
+# --- 1. 網頁質感設定 (Muji 暖米色調) ---
+st.set_page_config(page_title="📸 拍拍挑戰：特工觀察", layout="centered")
 st.markdown("""
     <style>
     .stApp { background-color: #F5F5F0; }
     h1, h2, h3, p, label { color: #5F5F5F !important; font-family: 'Noto Sans TC', sans-serif; }
-    .task-box { background-color: #FFFFFF; padding: 25px; border: 1px solid #E6E6E1; border-radius: 4px; margin: 15px 0; }
-    .stButton>button { background-color: #FFFFFF; color: #5F5F5F; border: 1px solid #D9D9D9; border-radius: 2px; width: 100%; }
-    .stButton>button:hover { border: 1px solid #8C8C8C; background-color: #EBEBE6; }
+    .task-box { background-color: #FFFFFF; padding: 20px; border: 1px solid #E6E6E1; border-radius: 4px; margin-bottom: 15px; }
+    .stButton>button { background-color: #FFFFFF; color: #5F5F5F; border: 1px solid #D9D9D9; border-radius: 2px; }
+    
+    /* 照片牆不規則排列效果 */
+    .gallery-container { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 20px; }
+    .gallery-item { background-color: white; border: 1px solid #E6E6E1; padding: 5px; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); }
+    .gallery-text { font-size: 0.7rem; color: #8C8C8C; text-align: center; margin-top: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 初始設定與資料讀取 ---
+# --- 2. 資料讀取設定 ---
 SHEET_ID = "1cxSA5qvLKmu2FjYR2xZI3fdSocXS_VCOXYUdk6C0YVA"
 USER_CSV = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=users"
 TASK_CSV = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=tasks"
 
-# 解決 CSV_URL 未定義的問題：統一使用 USER_CSV
 @st.cache_data(ttl=10)
 def load_data(url):
     try:
         return pd.read_csv(url)
-    except Exception as e:
+    except:
         return None
 
-df_users = load_data(USER_CSV)
+# --- 3. 核心邏輯：抽獎券計算機 ---
+def calculate_tickets(a, b, c, d, e):
+    # 依照妳的要求：A:5/1, B:3/1, C:2/1, D:1/1, E:1/2
+    tickets = (a // 5) + (b // 3) + (c // 2) + (d * 1) + (e * 2)
+    return int(tickets)
 
-# --- 3. 初始化 Session State (預防 AttributeError) ---
+# --- 4. 初始化 Session ---
 if 'login' not in st.session_state:
     st.session_state.login = False
-    st.session_state.real_name = ""
-    st.session_state.student_id = ""
-    st.session_state.nickname = ""
     st.session_state.current_task = "尚未領取任務"
 
-# --- 4. 登入邏輯判斷 ---
+# --- 5. 程式主邏輯 ---
+df_users = load_data(USER_CSV)
+
 if df_users is not None:
     COL_NAME = "name(姓名)"
     COL_ID = "Student ID(預設密碼)"
     COL_NICK = "Nickname(變更暱稱)"
 
-    # A. 尚未登入：顯示登入介面
     if not st.session_state.login:
         st.title("🍂 拍照觀察員：身分登入")
-        
         name_list = df_users[COL_NAME].dropna().tolist()
         selected_name = st.selectbox("帳號（預設為姓名）", ["搜尋名字"] + name_list)
         input_pwd = st.text_input("密碼（預設為學號）", type="password")
 
         if st.button("確認進入"):
             user_info = df_users[df_users[COL_NAME] == selected_name].iloc[0]
-            correct_id = str(user_info[COL_ID]).strip()
-            
-            if input_pwd.strip() == correct_id:
+            if input_pwd.strip() == str(user_info[COL_ID]).strip():
                 st.session_state.login = True
                 st.session_state.real_name = selected_name
-                st.session_state.student_id = correct_id
-                # 處理暱稱為空值的情況
+                st.session_state.student_id = user_info[COL_ID]
                 nick = user_info[COL_NICK]
                 st.session_state.nickname = "" if pd.isna(nick) else str(nick)
                 st.rerun()
             else:
-                st.error("密碼錯誤，請重新確認。")
+                st.error("密碼錯誤")
 
-    # B. 已登入：顯示個人空間
     else:
-        # 決定顯示名稱：暱稱優先，若無則顯示本名
+        # 已登入介面
         display_name = st.session_state.nickname if st.session_state.nickname.strip() != "" else st.session_state.real_name
-
         st.title(f"📝 {display_name} 今天拍了沒📸")
         
-        # 隱私灰色提示
-        st.markdown(f"""
-            <p style='color: #8C8C8C; font-size: 0.8rem; margin-top: -15px;'>
-            已認證觀察員：{st.session_state.real_name} (ID: {st.session_state.student_id})
-            </p>
-        """, unsafe_allow_html=True)
+        # --- [新增] 照片拼貼牆區域 (不須向下滑，放在最上方) ---
+        # 這裡假設未來從 Google Sheet 讀取到的任務照片 (示範用)
+        # 每一項是 (任務簡稱, 圖片網址)
+        completed_photos = [
+            ("白鞋陣列", "https://via.placeholder.com/150/EBEBE6/5F5F5F?text=TASK+1"),
+            ("制式補給", "https://via.placeholder.com/150/E6E6E1/5F5F5F?text=TASK+2"),
+            ("學術分歧", "https://via.placeholder.com/180/F0F0EB/5F5F5F?text=TASK+3"),
+            ("酒精防線", "https://via.placeholder.com/140/EBEBE6/5F5F5F?text=TASK+4"),
+        ]
         
-        # 任務顯示區 (不須點擊直接顯示)
-        st.markdown(f"""
-        <div class="task-box">
-            <p style="font-size: 0.8rem; color: #8C8C8C; margin: 0;">當前觀察目標</p>
-            <h2 style="margin: 10px 0;">{st.session_state.current_task}</h2>
-        </div>
-        """, unsafe_allow_html=True)
+        st.write("🖼️ 我的觀察記憶庫")
+        cols = st.columns([1, 1.2, 0.8, 1.1]) # 不規則寬度創造隨機感
+        for i, (task_name, img_url) in enumerate(completed_photos):
+            with cols[i % 4]:
+                st.markdown(f"""
+                    <div class="gallery-item">
+                        <img src="{img_url}" style="width: 100%; height: auto; border-radius: 2px;">
+                        <div class="gallery-text">{task_name}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+        
+        st.write("---")
 
-        # 功能分頁
         tab1, tab2, tab3 = st.tabs(["🎯 領取任務", "🎁 抽獎進度", "⚙️ 個人設定"])
 
         with tab1:
-            st.subheader("隨機抽取今日任務")
-            difficulty = st.radio("選擇觀察難度", ["初級 (抽5張)", "中級 (抽3張)", "挑戰 (抽1張)"], horizontal=True)
+            st.subheader("選擇滲透等級")
+            # 5 級難度選擇
+            level = st.selectbox("難度分級", [
+                "A：【初級滲透】 (5任務換1券)",
+                "B：【進階觀察】 (3任務換1券)",
+                "C：【深度諜對諜】 (2任務換1券)",
+                "D：【極限衝突】 (1任務換1券)",
+                "E：【傳奇成就】 (1任務換2券)"
+            ])
             
-            if st.button("🎲 隨機變更任務內容"):
-                try:
-                    df_tasks = pd.read_csv(TASK_CSV)
-                    # 篩選難度（取標籤前兩個字，如「初級」）
-                    target_diff = difficulty[:2]
-                    filtered_tasks = df_tasks[df_tasks['difficulty'] == target_diff]
-                    
-                    if not filtered_tasks.empty:
-                        new_task = random.choice(filtered_tasks['content'].tolist())
-                        st.session_state.current_task = new_task
-                        st.success("任務更新成功！")
-                        st.rerun()
+            if st.button("🎲 隨機抽取任務"):
+                df_tasks = load_data(TASK_CSV)
+                if df_tasks is not None:
+                    target_diff = level[0] # 抓取 A, B, C, D, E
+                    filtered = df_tasks[df_tasks['difficulty'] == target_diff]
+                    if not filtered.empty:
+                        pick = filtered.sample(n=1).iloc[0]
+                        st.session_state.current_task = f"【{pick['title']}】\n{pick['content']}"
                     else:
-                        st.warning(f"目前任務池中沒有「{target_diff}」等級的內容。")
-                except:
-                    st.error("讀取任務表失敗，請確認 Google Sheet 中有名為 'tasks' 的分頁。")
+                        st.warning(f"任務池中尚無 {target_diff} 級任務")
+            
+            st.markdown(f"""
+                <div class="task-box">
+                    <p style="font-size: 0.8rem; color: #8C8C8C; margin: 0;">當前領取任務</p>
+                    <h3 style="margin: 10px 0;">{st.session_state.current_task}</h3>
+                </div>
+            """, unsafe_allow_html=True)
 
         with tab2:
-            st.subheader("抽獎券累積進度")
-            tickets = 1 # 這裡之後可以串接資料庫統計
-            st.write(f"目前已獲得： **{tickets}** 張現場抽獎券")
-            st.progress(tickets/10, text=f"累積進度：{tickets}/10")
-            st.image("https://img.icons8.com/color/96/ticket.png")
+            st.subheader("抽獎結算")
+            # 這裡假設從 df_users 讀取到的數值
+            # 妳可以在 Google Sheet 增加 done_A, done_B 等欄位
+            a, b, c, d, e = 5, 3, 0, 1, 0 # 範例數據
+            total_tickets = calculate_tickets(a, b, c, d, e)
+            
+            st.metric("當前可領取抽獎券", f"{total_tickets} 張")
+            st.write(f"進度：A級({a}) B級({b}) C級({c}) D級({d}) E級({e})")
+            st.progress(min((a+b+c+d+e)/20, 1.0), text="特工積分累積中")
 
         with tab3:
             st.subheader("帳號設定")
-            st.write(f"真實姓名：{st.session_state.real_name}")
-            new_nick = st.text_input("更換暱稱（暫時性）", value=st.session_state.nickname)
+            new_nick = st.text_input("更換暱稱", value=st.session_state.nickname)
             if st.button("確認修改"):
                 st.session_state.nickname = new_nick
-                st.success("暱稱已修改！")
                 st.rerun()
-            st.info("💡 提醒：目前更換僅限本次登入，若需永久儲存請告知班代。")
 
 else:
-    st.error("❌ 無法連線至資料庫，請檢查 Google Sheets 連結與權限。")
+    st.error("連線資料庫失敗")
