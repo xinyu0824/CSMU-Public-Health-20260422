@@ -11,11 +11,11 @@ COL_ID = "Student ID(預設密碼)"
 COL_NICK = "Nickname(變更暱稱)"
 COL_STATUS = "status(啟用狀況)"
 
-# 3. 讀取名冊
+# 3. 讀取名冊 (修改這段來抓出真兇)
 try:
-    df = conn.read(worksheet="users", ttl=60) # 60秒刷新一次
+    df = conn.read(worksheet="users", ttl=0) # 先改為 0 測試
 except Exception as e:
-    st.error(f"❌ 讀取失敗，請確認工作表名稱是否為 'users' 且權限已開啟。")
+    st.error(f"❌ 偵錯訊息：{e}") # 這行會告訴我們真正的報錯原因
     st.stop()
 
 # --- 無印良品 Muji 風格設定 ---
@@ -32,16 +32,16 @@ if 'login' not in st.session_state:
     st.session_state.login = False
 
 if not st.session_state.login:
-    st.title("🍂 甲班生活日誌：身分確認")
+    st.title("今天拍了沒")
     
     # 這裡使用妳指定的精確欄位名稱
     name_list = df[COL_NAME].dropna().tolist()
-    selected_name = st.selectbox("請選擇您的姓名", ["請選擇"] + name_list)
+    selected_name = st.selectbox("帳號（預設為本名）", ["請選擇"] + name_list)
     
     # 這裡使用妳指定的學號欄位
-    input_pwd = st.text_input("請輸入學號驗證 (Student ID)", type="password")
+    input_pwd = st.text_input("密碼（預設為學號）", type="password")
     
-    if st.button("確認進入系統"):
+    if st.button("確認登入"):
         if selected_name != "請選擇":
             # 抓取該學生的整列資料
             user_info = df[df[COL_NAME] == selected_name].iloc[0]
