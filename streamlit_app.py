@@ -98,34 +98,60 @@ if df_users is not None:
         tab1, tab2, tab3 = st.tabs(["🎯 領取任務", "🎁 抽獎進度", "⚙️ 個人設定"])
 
         with tab1:
-            st.subheader("選擇滲透等級")
-            # 5 級難度選擇
-            level = st.selectbox("難度分級", [
-                "A：【初級滲透】 (5任務換1券)",
-                "B：【進階觀察】 (3任務換1券)",
-                "C：【深度諜對諜】 (2任務換1券)",
-                "D：【極限衝突】 (1任務換1券)",
-                "E：【傳奇成就】 (1任務換2券)"
-            ])
-            
-            if st.button("🎲 隨機抽取任務"):
-                df_tasks = load_data(TASK_CSV)
-                if df_tasks is not None:
-                    target_diff = level[0] # 抓取 A, B, C, D, E
-                    filtered = df_tasks[df_tasks['difficulty'] == target_diff]
-                    if not filtered.empty:
-                        pick = filtered.sample(n=1).iloc[0]
-                        st.session_state.current_task = f"【{pick['title']}】\n{pick['content']}"
-                    else:
-                        st.warning(f"任務池中尚無 {target_diff} 級任務")
-            
-            st.markdown(f"""
-                <div class="task-box">
-                    <p style="font-size: 0.8rem; color: #8C8C8C; margin: 0;">當前領取任務</p>
-                    <h3 style="margin: 10px 0;">{st.session_state.current_task}</h3>
-                </div>
-            """, unsafe_allow_html=True)
+        with tab1:
+            st.subheader("🕵️ 任務檔案庫 (Mission Dossier)")
+            st.write("點擊各級檔案，查看詳細滲透目標：")
 
+            # 讀取任務資料
+            df_tasks = load_data(TASK_CSV)
+
+            if df_tasks is not None:
+                # 定義難度等級與對應名稱
+                difficulty_map = {
+                    "A": "【初級滲透】 (5任務換1券)",
+                    "B": "【進階觀察】 (3任務換1券)",
+                    "C": "【深度諜對諜】 (2任務換1券)",
+                    "D": "【極限衝突】 (1任務換1券)",
+                    "E": "【傳奇成就】 (1任務換2券)"
+                }
+
+                # 依序產生 A 到 E 的大框格
+                for level, label in difficulty_map.items():
+                    # 篩選該難度的任務
+                    level_tasks = df_tasks[df_tasks['difficulty'] == level]
+                    
+                    if not level_tasks.empty:
+                        # 這是「大框格」的開始
+                        with st.container():
+                            st.markdown(f"""
+                                <div style="border: 2px solid #D9D9D9; border-radius: 8px; padding: 15px; margin-bottom: 20px; background-color: #FFFFFF;">
+                                    <h3 style="color: #5F5F5F; border-bottom: 1px solid #E6E6E1; padding-bottom: 10px;">{label}</h3>
+                                </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # 在大框格內列出所有任務
+                            for _, task in level_tasks.iterrows():
+                                col_task, col_btn = st.columns([4, 1])
+                                with col_task:
+                                    st.markdown(f"**{task['title']}**")
+                                    st.caption(task['content'])
+                                with col_btn:
+                                    # 讓同學可以點擊「選定」這個任務
+                                    if st.button("鎖定", key=f"btn_{level}_{task['title']}"):
+                                        st.session_state.current_task = f"【{task['title']}】\n{task['content']}"
+                                        st.success(f"已選定任務：{task['title']}")
+                                        st.rerun()
+                            st.write("") # 增加間隔
+                    else:
+                        # 如果該難度沒任務，可以顯示一個灰色的占位框
+                        st.markdown(f"""
+                            <div style="border: 1px dashed #D9D9D9; border-radius: 8px; padding: 15px; margin-bottom: 20px; opacity: 0.5;">
+                                <h3 style="color: #8C8C8C;">{label} (情報蒐集中...)</h3>
+                            </div>
+                        """, unsafe_allow_html=True)
+            else:
+                st.warning("目前無法讀取任務檔案，請檢查 Google Sheet 的 'tasks' 分頁。")
+           
         with tab2:
             st.subheader("抽獎結算")
             # 這裡假設從 df_users 讀取到的數值
