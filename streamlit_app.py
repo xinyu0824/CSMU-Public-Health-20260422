@@ -27,12 +27,12 @@ cloudinary.config(
     secure = True
 )
 
-# 建立 GSheets 連線
+# [核心功能] 初始化 Google Sheets 連線
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=5)
 def load_data():
-    # 讀取使用者與任務表
+    # [核心功能] 從雲端讀取最新的使用者與任務表
     users = conn.read(worksheet="users")
     tasks = conn.read(worksheet="tasks")
     return users, tasks
@@ -40,7 +40,7 @@ def load_data():
 # --- 3. 核心邏輯 ---
 level_info = {
     "A": "【 潛伏訊號 】", "B": "【 視角破解 】", "C": "【 迷霧追蹤 】", 
-    "D": "【 極限干涉 】", "E": "【 傳奇解密 】"
+    "D": "【 極限干蝕 】", "E": "【 傳奇解密 】"
 }
 
 def calculate_total_tickets(user_row):
@@ -58,12 +58,13 @@ if 'login' not in st.session_state:
         'selected_lvl': "A"
     })
 
+# 執行讀取
 df_users, df_tasks = load_data()
 
 # --- 5. 流程分層 ---
 if df_users is not None:
     if not st.session_state.login:
-        # [登入介面邏輯保持不變]
+        # --- 登入介面 ---
         st.title("🍂 拍照觀察員：身分登入")
         name_list = df_users["name(姓名)"].dropna().tolist()
         selected_name = st.selectbox("帳號 (預設為姓名)", ["搜尋名字"] + name_list)
@@ -76,6 +77,7 @@ if df_users is not None:
                     raw_pwd = user_row.get("password(自訂密碼)", None)
                     correct_pwd = str(raw_pwd).strip() if (pd.notna(raw_pwd) and str(raw_pwd).strip() != "") else str(user_row["Student ID(預設密碼)"]).strip()
                 except: correct_pwd = str(user_row["Student ID(預設密碼)"]).strip()
+                
                 if input_pwd.strip() == correct_pwd:
                     st.session_state.login, st.session_state.student_id = True, str(user_row["Student ID(預設密碼)"]).strip()
                     st.rerun()
@@ -83,13 +85,14 @@ if df_users is not None:
 
     else:
         # --- 已登入：特工個人空間 ---
+        # 找到當前用戶在 DataFrame 中的位置 (Index)
         user_idx = df_users[df_users["Student ID(預設密碼)"].astype(str).str.strip() == st.session_state.student_id].index[0]
         user = df_users.iloc[user_idx]
         
         display_name = user["Nickname(變更暱稱)"] if pd.notna(user["Nickname(變更暱稱)"]) and str(user["Nickname(變更暱稱)"]).strip() != "" else user["name(姓名)"]
         st.title(f"📝 {display_name} 的特工記憶庫")
 
-        # --- 記憶庫展示 (點擊才載入縮圖以省流量) ---
+        # --- 記憶庫展示 ---
         with st.expander("🖼️ 查看我已回傳的觀察紀錄"):
             photo_val = user.get("photo_list")
             if pd.isna(photo_val) or str(photo_val).strip() == "":
@@ -100,7 +103,6 @@ if df_users is not None:
                 cols = st.columns(3)
                 for i, u in enumerate(p_urls):
                     with cols[i % 3]:
-                        # 核心優化：讀取時強制要求 Cloudinary 提供 400 寬度的經濟畫質縮圖
                         thumb = u.replace("/upload/", "/upload/w_400,q_auto:eco/")
                         st.markdown(f'<div class="polaroid"><img src="{thumb}" style="width:100%;"></div>', unsafe_allow_html=True)
                         st.caption(t_names[i] if i < len(t_names) else "未知任務")
@@ -109,7 +111,6 @@ if df_users is not None:
         tab1, tab2, tab3 = st.tabs(["🎯 任務挑選", "📊 進度瀏覽", "⚙️ 設定"])
 
         with tab1:
-            # 等級選擇與任務列表 (邏輯保持，但增加鎖定後的上傳功能)
             btn_cols = st.columns(5)
             for i, lvl in enumerate(["A", "B", "C", "D", "E"]):
                 if btn_cols[i].button(lvl, key=f"btn_{lvl}", help=level_info[lvl]):
@@ -118,6 +119,7 @@ if df_users is not None:
             curr_lvl = st.session_state.selected_lvl
             st.markdown(f"**當前查閱：{level_info[curr_lvl]}**")
             
+            # 顯示任務列表
             filtered = df_tasks[df_tasks['difficulty'].astype(str).str.strip() == curr_lvl]
             for _, task in filtered.iterrows():
                 with st.container():
@@ -127,18 +129,18 @@ if df_users is not None:
                         st.session_state.locked_diff = curr_lvl
                         st.toast(f"已選定：{task['title']}")
 
-            # --- 🚀 關鍵新增：情報回傳(上傳)區 ---
+            # --- [核心整合] 情報回傳區 ---
             if st.session_state.locked_task:
                 st.markdown(f'<div class="upload-zone">', unsafe_allow_html=True)
                 st.subheader(f"📡 情報回傳：{st.session_state.locked_task}")
-                up_file = st.file_uploader("上傳觀察證物 (PNG/JPG)", type=['png', 'jpg', 'jpeg'], key="agent_upload")
+                up_file = st.file_uploader("上傳觀察證物", type=['png', 'jpg', 'jpeg'], key="agent_upload")
                 
                 if up_file:
                     st.image(up_file, width=200, caption="準備回傳的草稿")
-                    if st.button("🚀 正式回傳總部 (無法撤回)"):
-                        with st.spinner("情報加密傳輸中..."):
+                    if st.button("🚀 正式回傳總部 (更新數據)"):
+                        with st.spinner("正在將情報同步至雲端資料庫..."):
                             try:
-                                # 1. 上傳並自動壓縮至 800px 寬度, 經濟畫質
+                                # 1. 先上傳到 Cloudinary
                                 res = cloudinary.uploader.upload(
                                     up_file,
                                     folder="CSMU_AGENT",
@@ -146,30 +148,33 @@ if df_users is not None:
                                 )
                                 img_url = res["secure_url"]
                                 
-                                # 2. 更新資料庫 (本地 DataFrame)
-                                # 組合照片網址
+                                # 2. [核心功能] 更新本地 DataFrame 資料
+                                # 更新照片清單
                                 old_p = str(user.get("photo_list", ""))
                                 df_users.at[user_idx, "photo_list"] = img_url if old_p in ["nan", ""] else f"{old_p},{img_url}"
-                                # 組合任務名稱
+                                
+                                # 更新任務標題清單
                                 old_t = str(user.get("task_list", ""))
                                 df_users.at[user_idx, "task_list"] = st.session_state.locked_task if old_t in ["nan", ""] else f"{old_t},{st.session_state.locked_task}"
-                                # 增加對應難度的計數
-                                diff_col = f"done_{st.session_state.locked_diff}"
-                                df_users.at[user_idx, diff_col] = int(user.get(diff_col, 0)) + 1
                                 
-                                # 3. 寫回 Google Sheets
+                                # [核心功能] 更新對應難度的達成數量 (done_A, done_B 等)
+                                diff_col = f"done_{st.session_state.locked_diff}"
+                                current_count = int(user.get(diff_col, 0)) if pd.notna(user.get(diff_col)) else 0
+                                df_users.at[user_idx, diff_col] = current_count + 1
+                                
+                                # 3. [核心功能] 將整份 DataFrame 直接寫回 Google Sheets
                                 conn.update(worksheet="users", data=df_users)
                                 
                                 st.balloons()
-                                st.success("✅ 情報回傳成功！成就已解鎖。")
-                                st.cache_data.clear() # 強制刷新
+                                st.success("✅ 情報同步完成！您的進度已更新。")
+                                st.cache_data.clear() # 清除快取，確保下次讀取的是最新資料
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"傳輸失敗：{e}")
+                                st.error(f"同步失敗：{e}")
                 st.markdown('</div>', unsafe_allow_html=True)
 
         with tab2:
-            # 進度結算 (邏輯保持)
+            # 進度結算
             for lvl in ["A", "B", "C", "D", "E"]:
                 count = int(user.get(f"done_{lvl}", 0)) if pd.notna(user.get(f"done_{lvl}")) else 0
                 st.write(f"{level_info[lvl]}： {count} / 5")
@@ -177,10 +182,25 @@ if df_users is not None:
             st.metric("當前累計抽獎券", f"{calculate_total_tickets(user)} 張")
 
         with tab3:
-            # 個人設定 (可依照需求加入修改邏輯)
             st.subheader("⚙️ 檔案維護")
             st.write(f"真實姓名：{user['name(姓名)']}")
-            st.caption("如需修改密碼或暱稱，請點擊同步按鈕。")
-            # ... 修改邏輯 ...
+            st.info("若需修改暱稱或密碼，請填寫後點擊同步。")
+            new_nick = st.text_input("更換暱稱", value=user["Nickname(變更暱稱)"] if pd.notna(user["Nickname(變更暱稱)"]) else "")
+            new_pwd = st.text_input("修改自訂密碼", type="password")
+            
+            if st.button("同步至總部檔案"):
+                # 這裡同樣可以使用 conn.update 來實作暱稱修改
+                df_users.at[user_idx, "Nickname(變更暱稱)"] = new_nick
+                if new_pwd.strip() != "":
+                    df_users.at[user_idx, "password(自訂密碼)"] = new_pwd
+                conn.update(worksheet="users", data=df_users)
+                st.success("✅ 設定已同步！")
+                st.rerun()
+
+    # 側邊欄
+    if st.session_state.login:
+        with st.sidebar:
+            st.markdown("### 📍 目前選定目標")
+            st.info(st.session_state.locked_task if st.session_state.locked_task else "尚未鎖定")
 
 else: st.error("❌ 資料庫連線中斷")
