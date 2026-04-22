@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import random
 
-# --- 1. 無印風美學設定 ---
+# --- 1. 網頁畫面設定 ---
 st.set_page_config(page_title=" 📸拍拍挑戰", layout="centered")
 st.markdown("""
     <style>
@@ -53,7 +53,7 @@ if df is not None:
         
         # 檢查欄位是否存在
         if COL_NAME not in df.columns:
-            st.error(f"找不到欄位 '{COL_NAME}'，請檢查 Excel 第一列。")
+            st.error(f"找不到欄位 '{Nickname(變更暱稱)}'，請檢查 Excel 第一列。")
             st.write("目前的欄位有：", list(df.columns))
             st.stop()
 
@@ -74,11 +74,10 @@ if df is not None:
                 st.rerun()
             else:
                 st.error("密碼錯誤")
-
-else:
+            
+        else:
             display_name = st.session_state.nickname
-
-        # 大標題：質感顯示
+            # 大標題：質感顯示
         st.title(f"📝 {display_name} 今天拍了沒📸")
         
         # 小小的灰色提示：增加安全感與儀式感
