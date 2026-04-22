@@ -63,16 +63,19 @@ if df_users is not None:
         if st.button("確認進入"):
             match = df_users[df_users["name(姓名)"] == selected_name]
             if not match.empty:
-                user_row = match.iloc[0]
-                # 密碼邏輯：優先檢查 password(自訂密碼)
-                correct_pwd = str(user_row["password(自訂密碼)"]).strip() if pd.notna(user_row["password(自訂密碼)"]) else str(user_row["Student ID(永久ID)"]).strip()
-                
-                if input_pwd.strip() == correct_pwd:
-                    st.session_state.login = True
-                    st.session_state.user_info = user_row
-                    st.rerun()
-                else:
-                    st.error("密碼錯誤，請重新輸入。")
+                # 安全讀取邏輯：如果找不到 password 欄位，就用預設學號，且不崩潰
+                try:
+                    # 嘗試抓取自訂密碼
+                    raw_pwd = user_info.get("password(自訂密碼)", None)
+                    # 如果欄位存在且有內容，就用它；否則回退到學號
+        if pd.notna(raw_pwd) and str(raw_pwd).strip() != "":
+            correct_pwd = str(raw_pwd).strip()
+        else:
+            correct_pwd = str(user_info["Student ID(永久ID)"]).strip()
+            
+except KeyError:
+    # 如果連欄位都找不到，直接用學號
+    correct_pwd = str(user_info["Student ID(永久ID)"]).strip()
 
     # B. 已登入介面
     else:
