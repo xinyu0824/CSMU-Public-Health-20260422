@@ -4,18 +4,18 @@ import cloudinary
 import cloudinary.uploader
 from streamlit_gsheets import GSheetsConnection
 
-# --- 1. 視覺與稱號樣式設定 (特工總部 4.1) ---
+# --- 1. 視覺美學與稱號模組 (特工總部 4.3) ---
 st.set_page_config(page_title="📸 拍拍挑戰：特工觀察", layout="centered")
 
-# [核心功能] 稱號門檻設定
+# [核心功能] 稱號邏輯
 def get_agent_rank(tickets, photo_count):
-    if photo_count == 0: return "🆕尚未有稱號"
+    if photo_count == 0: return "🆕 尚未獲得稱號"
     if tickets >= 11: return "🌌 傳奇拍拍"
     elif tickets >= 7: return "🎖️ 大師拍拍"
     elif tickets >= 4: return "🛡️ 菁英拍拍"
     else: return "🌱 實習拍拍"
 
-# CSS 深度美化
+# CSS 深度美化：徹底解決「狹窄」問題
 st.markdown("""
     <style>
     .stApp { background-color: #F5F5F0; }
@@ -37,54 +37,56 @@ st.markdown("""
     .title-wrapper { display: flex; align-items: center; margin-bottom: 25px; gap: 10px; }
     .main-title { font-size: 1.6rem; margin: 0; font-weight: bold; }
 
-    /* --- [視覺修正] 難度區域樣式 - 確保文字顯示 --- */
+    /* --- [關鍵修正] 難度區域：極寬排列 --- */
     div[role="radiogroup"] {
         display: flex !important;
         flex-direction: row !important;
         justify-content: space-between !important;
-        gap: 10px !important;
-        width: 100% !important;
+        gap: 12px !important;
+        width: 100% !important; /* 撐滿整個容器寬度 */
     }
 
     div[role="radiogroup"] > label {
-        flex: 1 !important;
+        flex: 1 !important; /* 這是關鍵：讓 5 個按鈕平均分配所有寬度 */
         background-color: #FFFFFF !important;
         border: 1px solid #D9D9D9 !important;
         border-radius: 8px !important;
-        cursor: pointer;
+        padding: 18px 0 !important; /* 增加上下高度 */
+        min-height: 60px !important;
         display: flex !important;
         justify-content: center !important;
         align-items: center !important;
-        transition: all 0.2s;
-        padding: 12px 0 !important;
-        min-height: 50px !important;
+        cursor: pointer;
+        transition: all 0.2s ease-in-out;
     }
 
-    /* 隱藏原生圓圈 */
+    /* 隱藏單選小圓點 */
     div[role="radiogroup"] label div[data-baseweb="radio"] div:first-child {
         display: none !important;
     }
 
-    /* 選項文字樣式 (黑字) */
-    div[role="radiogroup"] div[data-testid="stMarkdownContainer"] p {
-        font-size: 1.2rem !important;
+    /* 文字樣式：加粗加大 */
+    div[role="radiogroup"] p {
+        font-size: 1.3rem !important;
         font-weight: bold !important;
-        margin: 0 !important;
         color: #5F5F5F !important;
+        margin: 0 !important;
     }
 
-    /* [選中狀態] 黃底白字填充 */
+    /* [選中狀態] Muji 黃底白字 */
     div[role="radiogroup"] label[aria-checked="true"] {
         background-color: #FFC107 !important; 
         border-color: #FFC107 !important;
+        transform: translateY(-2px); /* 輕微浮起感 */
+        box-shadow: 0 4px 10px rgba(255, 193, 7, 0.2);
     }
     div[role="radiogroup"] label[aria-checked="true"] p {
         color: #FFFFFF !important; 
     }
 
-    /* 任務卡片樣式 */
+    /* 任務卡片與新手導引卡片 */
     .mission-card { background-color: #FFFFFF; padding: 18px; border: 1px solid #E6E6E1; border-radius: 6px; margin-bottom: 12px; border-left: 5px solid #FFC107; }
-    .tutorial-card { background-color: #FFF9E6; padding: 20px; border: 2px dashed #FFC107; border-radius: 10px; margin-bottom: 20px; }
+    .tutorial-card { background-color: #FFF9E6; padding: 25px; border: 2px dashed #FFC107; border-radius: 12px; margin-bottom: 25px; }
     .polaroid { background-color: white; padding: 12px; border: 1px solid #E6E6E1; box-shadow: 2px 2px 8px rgba(0,0,0,0.05); text-align: center; }
     </style>
     """, unsafe_allow_html=True)
@@ -100,8 +102,8 @@ cloudinary.config(
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1cxSA5qvLKmu2FjYR2xZI3fdSocXS_VCOXYUdk6C0YVA/edit?usp=sharing"
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 全局難度
-level_info = {"A ": "【初階】", "B ": "【 中下階 】", "C ": "【 中上階 】", "D ": "【 高階 】", "E ": "【 傳奇 】"}
+# 全局難度 (移除空格，保持邏輯純淨)
+level_info = {"A": "【初階】", "B": "【 中下階 】", "C": "【 中上階 】", "D": "【 高階 】", "E": "【 傳奇 】"}
 
 def clean_id_logic(val):
     if pd.isna(val) or str(val).strip().lower() == "nan": return ""
@@ -132,8 +134,7 @@ df_users, df_tasks = load_data()
 # --- 4. 流程 ---
 if df_users is not None:
     if not st.session_state.login:
-        # --- 登入介面 ---
-        st.title("🍂公衛一甲：身分登入")
+        st.title("🍂 公衛一甲：身分登入")
         name_list = df_users["name(姓名)"].dropna().tolist()
         selected_name = st.selectbox("帳號 (預設姓名) *登入後可變更暱稱", ["搜尋名字"] + name_list)
         input_pwd = st.text_input("密碼 (預設學號)", type="password")
@@ -149,31 +150,24 @@ if df_users is not None:
                     st.rerun()
                 else: st.error("密碼錯誤。")
     else:
-        # 已登入：精準處理索引
-        temp_ids = df_users["Student ID(預設密碼)"].apply(clean_id_logic)
-        user_matches = df_users[temp_ids == st.session_state.student_id]
+        # 已登入
+        df_users["Student ID(預設密碼)"] = df_users["Student ID(預設密碼)"].apply(clean_id_logic)
+        user = df_users[df_users["Student ID(預設密碼)"] == st.session_state.student_id].iloc[0]
+        user_idx = df_users[df_users["Student ID(預設密碼)"] == st.session_state.student_id].index[0]
         
-        if user_matches.empty:
-            st.error("同步失敗"); st.session_state.login = False; st.rerun(); st.stop()
-            
-        user = user_matches.iloc[0]
-        user_idx = user_matches.index[0]
-        
-        # 判定是否為新手 (一張照片都沒拍過)
         p_val = str(user.get("photo_list", "")).strip()
         photo_count = 0 if (p_val == "" or p_val.lower() == "nan") else len([u for u in p_val.split(",") if u.strip() != ""])
         is_newbie = (photo_count == 0)
         
         total_tickets = calculate_total_tickets(user)
         rank_label = get_agent_rank(total_tickets, photo_count)
-        nick = str(user.get("Nickname(變更暱稱)", "")).strip()
-        disp_name = nick if (nick != "" and nick.lower() != "nan") else user["name(姓名)"]
+        disp_name = user["Nickname(變更暱稱)"] if (pd.notna(user["Nickname(變更暱稱)"]) and str(user["Nickname(變更暱稱)"]) != "") else user["name(姓名)"]
         
-        # --- 標題展示 ---
+        # --- 首頁標題 ---
         st.markdown(f'<div class="title-wrapper"><span class="agent-badge">{rank_label}</span><span class="main-title">{disp_name} 的特工記憶庫</span></div>', unsafe_allow_html=True)
 
         with st.sidebar:
-            st.markdown(f"### 🎖️個人檔案\n**稱號：** {rank_label}\n**導生聚抽獎券：** {total_tickets} 張")
+            st.markdown(f"### 🎖️ 個人檔案\n**稱號：** {rank_label}\n**導生聚抽獎券：** {total_tickets} 張")
             st.write("---")
             if st.session_state.locked_task:
                 st.info(f"鎖定任務：\n{st.session_state.locked_task}")
@@ -200,10 +194,10 @@ if df_users is not None:
                 st.markdown("""
                     <div class="tutorial-card">
                         <h3>👋 你好，歡迎加入拍拍挑戰！</h3>
-                        <p>目前你尚未獲得任何稱號。完成下方的新手引導任務，即可正式獲得稱號，並開啟A至E難度區域，任意挑選任務。</p>
-                        <hr>
-                        <b>🚩 新手引導任務：快試試看</b><br>
-                        <small>拍攝任意一張校園內的角落照片，或者具有學習氛圍之照片，上傳至底下。</small>
+                        <p>目前你尚未獲得任何稱號。完成下方的新手引導任務，即可正式獲得稱號，並開啟 A 至 E 難度區域，任意挑選任務。</p>
+                        <hr style="border: 0.5px solid #FFC107; opacity: 0.3;">
+                        <b>🚩 引導任務：快試試看</b><br>
+                        <small>拍攝任意一張校園內的角落照片，或者具有學習氛圍的照片，上傳至下方完成首場觀測！</small>
                     </div>
                 """, unsafe_allow_html=True)
                 st.session_state.locked_task = "新手引導：初試身心"
@@ -211,6 +205,7 @@ if df_users is not None:
             else:
                 st.write("### 📍 難度分級")
                 diff_options = ["A", "B", "C", "D", "E"]
+                # 橫排單選方格，CSS 已設定撐滿寬度
                 selected_lvl = st.radio("難度分區", options=diff_options, index=diff_options.index(st.session_state.selected_lvl), horizontal=True, label_visibility="collapsed")
                 
                 if selected_lvl != st.session_state.selected_lvl:
@@ -229,60 +224,51 @@ if df_users is not None:
 
             if st.session_state.locked_task:
                 st.write("---")
-                st.subheader(f"任務：{st.session_state.locked_task}")
+                st.subheader(f"任務回傳：{st.session_state.locked_task}")
                 up_file = st.file_uploader("選取照片", type=['png', 'jpg', 'jpeg'], key=f"up_{st.session_state.locked_task}")
                 if up_file:
-                    if st.button("🚀正式回傳總部"):
-                        with st.spinner("上傳中..."):
+                    if st.button("🚀 正式回傳總部"):
+                        with st.spinner("同步中..."):
                             try:
                                 res = cloudinary.uploader.upload(up_file, folder="CSMU_AGENT", transformation=[{'width': 800, 'quality': "auto:eco"}])
                                 img_url = res["secure_url"]
-                                
-                                # 強制轉換為 object 避免 float64 錯誤
                                 df_users['photo_list'] = df_users['photo_list'].astype(object)
                                 df_users['task_list'] = df_users['task_list'].astype(object)
-                                
                                 cur_p = str(df_users.at[user_idx, "photo_list"]).strip()
                                 df_users.at[user_idx, "photo_list"] = str(img_url if (cur_p == "" or cur_p.lower() == "nan") else f"{cur_p},{img_url}")
                                 cur_t = str(df_users.at[user_idx, "task_list"]).strip()
                                 df_users.at[user_idx, "task_list"] = str(st.session_state.locked_task if (cur_t == "" or cur_t.lower() == "nan") else f"{cur_t},{st.session_state.locked_task}")
-                                
                                 diff_col = f"done_{st.session_state.locked_diff}"
                                 try: val = int(float(df_users.at[user_idx, diff_col])) if pd.notna(df_users.at[user_idx, diff_col]) else 0
                                 except: val = 0
                                 df_users.at[user_idx, diff_col] = str(val + 1)
-                                
                                 conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users)
                                 st.balloons()
-                                if is_newbie: st.success("🎉 恭喜完成新手任務！你已正式晉升為 🌱 實習拍拍。")
-                                else: st.success("回傳成功！")
+                                if is_newbie: st.success("🎉 晉升成功！你已正式獲得稱號，所有區域已解鎖。")
+                                else: st.success("情報回傳成功！")
                                 st.cache_data.clear(); st.rerun()
                             except Exception as e: st.error(f"同步失敗：{e}")
 
         with tab2:
-            st.subheader(f"📊 {disp_name} 的進度")
+            st.subheader(f"📊 {disp_name} 的進度結算")
             for lvl in ["A", "B", "C", "D", "E"]:
                 c = user.get(f"done_{lvl}", 0)
                 try: val = int(float(c))
                 except: val = 0
                 st.write(f"{level_info[lvl]}： {val} / 5")
                 st.progress(min(val/5, 1.0))
-            st.metric("抽獎券累計", f"{total_tickets} 張")
+            st.metric("當前累計抽獎券", f"{total_tickets} 張")
 
         with tab3:
-            st.subheader("⚙️ 設定")
+            st.subheader("⚙️ 帳號設定")
             new_nick = st.text_input("修改暱稱", value=disp_name)
-            new_pwd = st.text_input("自訂密碼", type="password", placeholder="留空不修改")
-            if st.button("同步設定"):
-                # [關鍵修正] 更新前強制轉型，防止 float64 報錯
+            new_pwd = st.text_input("修改自訂密碼", type="password", placeholder="留空不修改")
+            if st.button("💾 同步設定"):
                 df_users['Nickname(變更暱稱)'] = df_users['Nickname(變更暱稱)'].astype(object)
                 df_users['password(自訂密碼)'] = df_users['password(自訂密碼)'].astype(object)
-                
                 df_users.at[user_idx, "Nickname(變更暱稱)"] = str(new_nick)
-                if new_pwd.strip() != "": 
-                    df_users.at[user_idx, "password(自訂密碼)"] = str(new_pwd)
-                
+                if new_pwd.strip() != "": df_users.at[user_idx, "password(自訂密碼)"] = str(new_pwd)
                 conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users)
                 st.success("✅ 設定同步完成！"); st.cache_data.clear(); st.rerun()
 
-else: st.error("❌ 無法連線")
+else: st.error("❌ 無法連線至總部資料庫")
