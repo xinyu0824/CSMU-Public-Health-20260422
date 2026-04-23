@@ -4,7 +4,7 @@ import cloudinary
 import cloudinary.uploader
 from streamlit_gsheets import GSheetsConnection
 
-# --- 1. 視覺美學與稱號模組 ---
+# --- 1. 視覺美學與稱號模組 (特工總部 4.6) ---
 st.set_page_config(page_title="📸 拍拍挑戰：特工觀察", layout="centered")
 
 def get_agent_rank(tickets, photo_count):
@@ -14,12 +14,10 @@ def get_agent_rank(tickets, photo_count):
     elif tickets >= 4: return "🛡️ 菁英拍拍"
     else: return "🌱 實習拍拍"
 
-# --- [視覺究極進化] 寬闊對稱 CSS ---
 st.markdown("""
     <style>
     .stApp { background-color: #F5F5F0; }
     h1, h2, h3, p, label { color: #5F5F5F !important; font-family: 'Noto Sans TC', sans-serif; }
-    
     .agent-badge { 
         display: inline-block; padding: 4px 14px; background-color: #5F5F5F; 
         color: #FFFFFF !important; border-radius: 20px; font-size: 0.85rem; 
@@ -28,81 +26,29 @@ st.markdown("""
     .title-wrapper { display: flex; align-items: center; margin-bottom: 25px; gap: 10px; }
     .main-title { font-size: 1.6rem; margin: 0; font-weight: bold; }
 
-    /* --- 難度分級：寬闊對稱設計 --- */
-    div[role="radiogroup"] {
-        display: flex !important;
-        flex-direction: row !important;
-        justify-content: center !important; /* 居中排列 */
-        gap: 20px !important; /* 增加 A 到 E 之間的間距，不再擠在一起 */
-        width: 100% !important;
-        padding: 10px 0 !important;
-    }
+    /* 難度區域樣式 */
+    div[role="radiogroup"] { display: flex !important; flex-direction: row !important; justify-content: center !important; gap: 20px !important; width: 100% !important; padding: 10px 0 !important; }
+    div[role="radiogroup"] > label { flex: 1 !important; min-width: 65px !important; background-color: #FFFFFF !important; border: 1px solid #D9D9D9 !important; border-radius: 10px !important; padding: 15px 0 !important; cursor: pointer; transition: all 0.25s ease; display: flex !important; justify-content: center !important; align-items: center !important; }
+    div[role="radiogroup"] label div[data-baseweb="radio"] > div:first-child { display: none !important; }
+    div[role="radiogroup"] label p { font-size: 1.4rem !important; font-weight: bold !important; color: #5F5F5F !important; margin: 0 !important; }
+    div[role="radiogroup"] label[aria-checked="true"] { background-color: #FFC107 !important; border-color: #FFB300 !important; box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3) !important; }
+    div[role="radiogroup"] label[aria-checked="true"] p { color: #FFFFFF !important; }
 
-    div[role="radiogroup"] > label {
-        flex: 1 !important;
-        min-width: 65px !important; /* 確保每個框框都有基本寬度 */
-        background-color: #FFFFFF !important;
-        border: 1px solid #D9D9D9 !important;
-        border-radius: 10px !important;
-        padding: 15px 0 !important; /* 增加上下內距 */
-        cursor: pointer;
-        transition: all 0.25s ease;
-        display: flex !important;
-        justify-content: center !important;
-        align-items: center !important;
-    }
-
-    /* 暴力移除單選圓圈與其容器 */
-    div[role="radiogroup"] label div[data-baseweb="radio"] {
-        display: flex !important;
-        justify-content: center !important;
-        width: 100% !important;
-    }
-    
-    /* 隱藏圓圈本體 */
-    div[role="radiogroup"] label div[data-baseweb="radio"] > div:first-child {
-        display: none !important;
-    }
-
-    /* 字母 A/B/C/D/E 文字樣式：確保絕對置中 */
-    div[role="radiogroup"] label p {
-        font-size: 1.4rem !important;
-        font-weight: bold !important;
-        color: #5F5F5F !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        line-height: 1 !important;
-        text-align: center !important;
-    }
-
-    /* [選中狀態] 亮眼填充黃底白字 */
-    div[role="radiogroup"] label[aria-checked="true"] {
-        background-color: #FFC107 !important; 
-        border-color: #FFB300 !important;
-        box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3) !important;
-    }
-    div[role="radiogroup"] label[aria-checked="true"] p {
-        color: #FFFFFF !important; 
-    }
-
-    /* 任務卡片樣式 */
     .mission-card { background-color: #FFFFFF; padding: 18px; border: 1px solid #E6E6E1; border-radius: 6px; margin-bottom: 12px; border-left: 6px solid #FFC107; }
     .tutorial-card { background-color: #FFF9E6; padding: 25px; border: 2px dashed #FFC107; border-radius: 12px; margin-bottom: 25px; }
     .polaroid { background-color: white; padding: 12px; border: 1px solid #E6E6E1; box-shadow: 2px 2px 8px rgba(0,0,0,0.05); text-align: center; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 配置 ---
+# --- 2. 服務配置 ---
 cloudinary.config(
     cloud_name = st.secrets["CLOUDINARY_CLOUD_NAME"],
     api_key = st.secrets["CLOUDINARY_API_KEY"],
     api_secret = st.secrets["CLOUDINARY_API_SECRET"],
     secure = True
 )
-
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1cxSA5qvLKmu2FjYR2xZI3fdSocXS_VCOXYUdk6C0YVA/edit?usp=sharing"
 conn = st.connection("gsheets", type=GSheetsConnection)
-
 level_info = {"A": "【初階】", "B": "【 中下階 】", "C": "【 中上階 】", "D": "【 高階 】", "E": "【 傳奇 】"}
 
 def clean_id_logic(val):
@@ -130,24 +76,40 @@ if 'login' not in st.session_state:
 
 df_users, df_tasks = load_data()
 
+# --- 4. 流程 ---
 if df_users is not None:
+    # [核心修正] 預處理登入名單，讓選單顯示暱稱
+    def get_login_label(row):
+        real_name = str(row["name(姓名)"])
+        nickname = str(row.get("Nickname(變更暱稱)", "")).strip()
+        if nickname != "" and nickname.lower() != "nan":
+            return f"{nickname} ({real_name})" # 顯示：暱稱 (真名)
+        return real_name
+
+    df_users["login_label"] = df_users.apply(get_login_label, axis=1)
+
     if not st.session_state.login:
+        # --- 登入介面 ---
         st.title("🍂 公衛一甲：身分登入")
-        name_list = df_users["name(姓名)"].dropna().tolist()
-        selected_name = st.selectbox("帳號 (預設姓名) *登入後可變更暱稱", ["搜尋名字"] + name_list)
+        login_list = df_users["login_label"].dropna().tolist()
+        selected_label = st.selectbox("帳號 (預設姓名) *登入後可變更代號", ["搜尋名字/暱稱"] + login_list)
         input_pwd = st.text_input("密碼 (預設學號)", type="password")
+        
         if st.button("確認進入"):
-            match = df_users[df_users["name(姓名)"] == selected_name]
+            # 使用 login_label 進行比對
+            match = df_users[df_users["login_label"] == selected_label]
             if not match.empty:
                 user_row = match.iloc[0]
                 db_id = clean_id_logic(user_row["Student ID(預設密碼)"])
                 db_custom_pwd = str(user_row.get("password(自訂密碼)", "")).strip()
                 correct_ans = db_custom_pwd if (db_custom_pwd != "" and db_custom_pwd != "nan") else db_id
+                
                 if input_pwd.strip() == correct_ans:
                     st.session_state.login, st.session_state.student_id = True, db_id
                     st.rerun()
                 else: st.error("密碼錯誤。")
     else:
+        # 已登入介面邏輯...
         df_users["Student ID(預設密碼)"] = df_users["Student ID(預設密碼)"].apply(clean_id_logic)
         user = df_users[df_users["Student ID(預設密碼)"] == st.session_state.student_id].iloc[0]
         user_idx = df_users[df_users["Student ID(預設密碼)"] == st.session_state.student_id].index[0]
@@ -157,19 +119,19 @@ if df_users is not None:
         is_newbie = (photo_count == 0)
         total_tickets = calculate_total_tickets(user)
         rank_label = get_agent_rank(total_tickets, photo_count)
-        disp_name = str(user.get("Nickname(變更暱稱)", "")) if (pd.notna(user.get("Nickname(變更暱稱)")) and str(user.get("Nickname(變更暱稱)")) != "") else user["name(姓名)"]
+        
+        nick = str(user.get("Nickname(變更暱稱)", "")).strip()
+        disp_name = nick if (nick != "" and nick.lower() != "nan") else user["name(姓名)"]
         
         st.markdown(f'<div class="title-wrapper"><span class="agent-badge">{rank_label}</span><span class="main-title">{disp_name} 的特工記憶庫</span></div>', unsafe_allow_html=True)
 
         with st.sidebar:
-            st.markdown(f"### 🎖️ 個人檔案\n**稱號：** {rank_label}\n**導生聚抽獎券：** {total_tickets} 張")
+            st.markdown(f"### 🎖️ 個人檔案\n**稱號：** {rank_label}\n**獎券：** {total_tickets} 張")
             st.write("---")
-            if st.session_state.locked_task:
-                st.info(f"鎖定任務：\n{st.session_state.locked_task}")
-            if st.button("🚪 登出系統"):
-                st.session_state.login = False; st.rerun()
+            if st.session_state.locked_task: st.info(f"鎖定：{st.session_state.locked_task}")
+            if st.button("🚪 登出系統"): st.session_state.login = False; st.rerun()
 
-        with st.expander("🖼️ 我的任務紀錄 (已上傳圖片)"):
+        with st.expander("🖼️ 我的紀錄"):
             if photo_count == 0: st.info("🌑 尚未有紀錄。")
             else:
                 p_urls = [u.strip() for u in p_val.split(",") if u.strip() != ""]
@@ -181,31 +143,19 @@ if df_users is not None:
                         st.markdown(f'<div class="polaroid"><img src="{thumb}" style="width:100%;"></div>', unsafe_allow_html=True)
                         st.caption(t_names[i] if i < len(t_names) else "")
 
-        tab1, tab2, tab3 = st.tabs(["🎯 任務選取", "📊 進度追蹤", "⚙️ 帳號設定"])
+        tab1, tab2, tab3 = st.tabs(["🎯 任務選取", "📊 進度追蹤", "⚙️ 設定"])
 
         with tab1:
             if is_newbie:
-                st.markdown("""
-                    <div class="tutorial-card">
-                        <h3>👋 你好，歡迎加入拍拍挑戰！</h3>
-                        <p>目前你尚未獲得任何稱號。完成下方的新手引導任務，即可正式獲得稱號並開啟完整任務區域。</p>
-                        <hr style="border: 0.5px solid #FFC107; opacity: 0.3;">
-                        <b>🚩 引導任務：快試試看</b><br>
-                        <small>拍攝一張校園內角落或具有學習氛圍的照片，上傳至下方完成首場觀測！</small>
-                    </div>
-                """, unsafe_allow_html=True)
-                st.session_state.locked_task = "新手引導：初試身心"
-                st.session_state.locked_diff = "A" 
+                st.markdown('<div class="tutorial-card"><h3>👋 哈囉特工，歡迎加入！</h3><p>完成新手引導任務後即可解鎖正式分區。</p><hr><b>🚩 任務：初試身心</b><br><small>拍攝校園一角即可！</small></div>', unsafe_allow_html=True)
+                st.session_state.locked_task, st.session_state.locked_diff = "新手引導：初試身心", "A"
             else:
-                st.write("### 📍 步驟一：選擇難度區域")
-                diff_options = ["A", "B", "C", "D", "E"]
-                selected_lvl = st.radio("難度分區", options=diff_options, index=diff_options.index(st.session_state.selected_lvl), horizontal=True, label_visibility="collapsed")
-                
+                st.write("### 📍 步驟一：選擇難度")
+                diff_opts = ["A", "B", "C", "D", "E"]
+                selected_lvl = st.radio("難度", options=diff_opts, index=diff_opts.index(st.session_state.selected_lvl), horizontal=True, label_visibility="collapsed")
                 if selected_lvl != st.session_state.selected_lvl:
-                    st.session_state.selected_lvl = selected_lvl
-                    st.session_state.locked_task = None
+                    st.session_state.selected_lvl, st.session_state.locked_task = selected_lvl, None
                     st.rerun()
-                
                 st.markdown(f"#### {level_info[st.session_state.selected_lvl]}")
                 filtered = df_tasks[df_tasks['difficulty'].astype(str).str.strip() == st.session_state.selected_lvl]
                 for _, task in filtered.iterrows():
@@ -213,14 +163,14 @@ if df_users is not None:
                         st.markdown(f'<div class="mission-card"><b>{task["title"]}</b><br><small>{task["content"]}</small></div>', unsafe_allow_html=True)
                         if st.button("鎖定此任務", key=f"lock_{task['title']}"):
                             st.session_state.locked_task, st.session_state.locked_diff = task['title'], st.session_state.selected_lvl
-                            st.toast(f"已選定：{task['title']}")
+                            st.toast(f"已鎖定：{task['title']}")
 
             if st.session_state.locked_task:
                 st.write("---")
-                st.subheader(f"步驟二：情報回傳 ({st.session_state.locked_task})")
+                st.subheader(f"任務回傳：{st.session_state.locked_task}")
                 up_file = st.file_uploader("選取照片", type=['png', 'jpg', 'jpeg'], key=f"up_{st.session_state.locked_task}")
                 if up_file:
-                    if st.button("🚀 正式回傳總部"):
+                    if st.button("🚀 正式回傳"):
                         with st.spinner("同步中..."):
                             try:
                                 res = cloudinary.uploader.upload(up_file, folder="CSMU_AGENT", transformation=[{'width': 800, 'quality': "auto:eco"}])
@@ -236,27 +186,24 @@ if df_users is not None:
                                 except: val = 0
                                 df_users.at[user_idx, diff_col] = str(val + 1)
                                 conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users)
-                                st.balloons()
-                                if is_newbie: st.success("🎉 晉升成功！你已正式成為特工。")
-                                else: st.success("情報回傳成功！")
-                                st.cache_data.clear(); st.rerun()
+                                st.balloons(); st.cache_data.clear(); st.rerun()
                             except Exception as e: st.error(f"同步失敗：{e}")
 
         with tab2:
-            st.subheader(f"📊 {disp_name} 的進度結算")
+            st.subheader("📊 進度結算")
             for lvl in ["A", "B", "C", "D", "E"]:
                 c = user.get(f"done_{lvl}", 0)
                 try: val = int(float(c))
                 except: val = 0
                 st.write(f"{level_info[lvl]}： {val} / 5")
                 st.progress(min(val/5, 1.0))
-            st.metric("當前累計抽獎券", f"{total_tickets} 張")
+            st.metric("抽獎券累計", f"{total_tickets} 張")
 
         with tab3:
-            st.subheader("⚙️ 帳號設定")
-            new_nick = st.text_input("修改暱稱", value=disp_name)
+            st.subheader("⚙️ 設定")
+            new_nick = st.text_input("修改暱稱 (下次登入會顯示)", value=nick)
             new_pwd = st.text_input("修改自訂密碼", type="password", placeholder="留空不修改")
-            if st.button("同步設定"):
+            if st.button("💾 同步設定"):
                 df_users['Nickname(變更暱稱)'] = df_users['Nickname(變更暱稱)'].astype(object)
                 df_users['password(自訂密碼)'] = df_users['password(自訂密碼)'].astype(object)
                 df_users.at[user_idx, "Nickname(變更暱稱)"] = str(new_nick)
