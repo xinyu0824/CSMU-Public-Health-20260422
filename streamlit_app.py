@@ -13,6 +13,20 @@ COOLDOWN_HOURS = 12
 
 st.set_page_config(page_title="📸 拍拍挑戰：特工觀察", layout="centered")
 
+# --- [防禦模組] 強制記憶初始化：徹底解決 AttributeError ---
+# 這段程式碼會確保無論任何情況，這六個核心記憶櫃一定存在
+init_keys = {
+    'login': False, 
+    'student_id': None, 
+    'selected_lvl': "A", 
+    't_done': {}, 
+    'g_res': None, 
+    'p_shown': False
+}
+for key, value in init_keys.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
+
 # --- 數據安全轉換器 ---
 def safe_str(val):
     if pd.isna(val) or str(val).strip().lower() == "nan": return "0"
@@ -22,7 +36,6 @@ def safe_int(val):
     try: return int(float(safe_str(val)))
     except: return 0
 
-# [稱號邏輯]
 def get_agent_rank(tickets, photo_count):
     if photo_count == 0: return "🆕 待命特工"
     if tickets >= 11: return "🌌 傳奇拍拍"
@@ -36,15 +49,10 @@ st.markdown("""
     h1, h2, h3, p, label { color: #5F5F5F !important; font-family: 'Noto Sans TC', sans-serif; }
     .agent-badge { display: inline-block; padding: 4px 14px; background-color: #5F5F5F; color: #FFFFFF !important; border-radius: 20px; font-size: 0.85rem; font-weight: bold; margin-right: 12px; }
     
-    /* 🟢 綠色進度標籤：顯眼設計 */
+    /* 🟢 綠色進度標籤 */
     .t-badge { 
-        background-color: #28a745; 
-        color: white !important; 
-        padding: 4px 12px; 
-        border-radius: 12px; 
-        font-size: 0.85rem; 
-        font-weight: bold;
-        box-shadow: 1px 1px 3px rgba(0,0,0,0.1);
+        background-color: #28a745; color: white !important; 
+        padding: 4px 12px; border-radius: 12px; font-size: 0.85rem; font-weight: bold;
     }
     
     .tutorial-box {
@@ -55,13 +63,12 @@ st.markdown("""
     
     .mission-card { background-color: #FFFFFF; padding: 18px; border: 1px solid #E6E6E1; border-radius: 6px; margin-bottom: 12px; border-left: 6px solid #FFC107; }
     
-    /* 賭場金卡 */
     .casino-zone { background: linear-gradient(135deg, #1a1a1a 0%, #3d3d3d 100%); color: #FFC107 !important; padding: 30px; border-radius: 20px; border: 3px solid #FFC107; text-align: center; margin-bottom: 25px; }
     .win-card { background: linear-gradient(135deg, #FFD700 0%, #FFC107 100%); color: white !important; padding: 30px; border-radius: 20px; text-align: center; box-shadow: 0 10px 25px rgba(255,193,7,0.4); margin: 20px 0; }
     
     div[role="radiogroup"] { display: flex !important; flex-direction: row !important; justify-content: center !important; gap: 12px !important; }
     div[role="radiogroup"] > label { flex: 1 !important; min-width: 65px !important; background-color: #FFFFFF !important; border: 1px solid #D9D9D9 !important; border-radius: 10px; padding: 15px 0 !important; cursor: pointer; display: flex !important; justify-content: center !important; }
-    div[role="radiogeb"] label div[data-baseweb="radio"] > div:first-child { display: none !important; }
+    div[role="radiogroup"] label div[data-baseweb="radio"] > div:first-child { display: none !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -77,34 +84,21 @@ def load_data():
         return users, tasks
     except: return None, None
 
-# [重要] 核心記憶初始化，防止 AttributeError
-if 'login' not in st.session_state:
-    st.session_state.update({
-        'login': False, 
-        'student_id': None, 
-        'selected_lvl': "A", 
-        't_done': {}, 
-        'g_res': None,  # 初始化博弈結果
-        'p_shown': False # 初始化獎勵看板狀態
-    })
-
 df_users, df_tasks = load_data()
 
 # --- 3. 流程 ---
 if df_users is not None:
     # 預防性補全
-    req_cols = ['tuto_task', 'tuto_prog', 'tuto_gamble', 'tuto_set', 'gift_given', 'extra_tickets', 'gamble_balance', 'done_A', 'done_B', 'done_C', 'done_D', 'done_E', 'loss_count', 'gamble_count', 'gamble_profit', 'task_cooldowns', 'Nickname(變更暱稱)', 'password(自訂密碼)']
-    for col in req_cols:
+    for col in ['tuto_task', 'tuto_prog', 'tuto_gamble', 'tuto_set', 'gift_given', 'extra_tickets', 'gamble_balance', 'done_A', 'done_B', 'done_C', 'done_D', 'done_E', 'loss_count', 'gamble_count', 'gamble_profit', 'task_cooldowns', 'Nickname(變更暱稱)', 'password(自訂密碼)']:
         if col not in df_users.columns: df_users[col] = "0" if col != "task_cooldowns" else "{}"
 
-    # 暱稱標籤
     df_users["login_label"] = df_users.apply(lambda r: str(r["Nickname(變更暱稱)"]) if (pd.notna(r["Nickname(變更暱稱)"]) and str(r["Nickname(變更暱稱)"]).strip() != "" and str(r["Nickname(變更暱稱)"]).lower() != "nan") else str(r["name(姓名)"]), axis=1)
 
     if not st.session_state.login:
         st.title("🍂 公衛一甲：特工登入")
         login_list = df_users["login_label"].dropna().tolist()
-        sel = st.selectbox("請選擇特工身份", ["搜尋代號/姓名"] + login_list)
-        pwd = st.text_input("密碼 (預設學號)", type="password")
+        sel = st.selectbox("特工代號/姓名", ["搜尋中..."] + login_list)
+        pwd = st.text_input("密碼", type="password")
         if st.button("進入觀測站"):
             match = df_users[df_users["login_label"] == sel]
             if not match.empty:
@@ -136,10 +130,10 @@ if df_users is not None:
         st.markdown(f'<div class="title-wrapper"><span class="agent-badge">{rank_label}</span><span class="main-title">{user["login_label"]} 的特工記憶庫</span></div>', unsafe_allow_html=True)
 
         with st.sidebar:
-            st.markdown(f"### 🎖️ 特工檔案\n**軍銜：** {rank_label}")
+            st.markdown(f"### 🎖️ 特工檔案\n**稱號：** {rank_label}")
             st.metric("抽獎券總額", f"{total_tickets} 張")
-            st.write(f"🃏 下注次數：{safe_int(user.get('gamble_count'))} 次")
-            st.write(f"💰 累計盈虧：{safe_int(user.get('gamble_profit'))} 張")
+            st.write(f"🃏 下注次數：{safe_int(user.get('gamble_count'))}")
+            st.write(f"💰 博弈盈虧：{safe_int(user.get('gamble_profit'))}")
             st.write("---")
             if st.button("🔄 同步資料"): st.cache_data.clear(); st.rerun()
             if st.button("🚪 登出系統"): st.session_state.login = False; st.rerun()
@@ -167,20 +161,19 @@ if df_users is not None:
             
             st.write("### 📍 步驟一：選擇難度")
             lvl = st.radio("分級", ["A", "B", "C", "D", "E"], horizontal=True, label_visibility="collapsed")
-            st.markdown(f"#### {lvl} 級任務區域")
             filtered = df_tasks[df_tasks['difficulty'].astype(str).str.strip() == lvl]
             for idx, task in filtered.iterrows():
                 with st.container():
                     st.markdown(f'<div class="mission-card"><b>{task["title"]}</b><br><small>{task["content"]}</small></div>', unsafe_allow_html=True)
                     if st.button("鎖定此任務", key=f"lock_{idx}"):
-                        if is_locked: st.warning("⚠️ 請先閱讀上方功能指引並按下確認鍵")
+                        if is_locked: st.warning("⚠️ 請先點擊上方「我已了解」按鈕")
                         else: st.toast("任務已鎖定")
 
         # --- Tab 2: 進度 ---
         with tabs[1]:
             is_locked = not st.session_state.t_done.get('tuto_prog', False)
             if is_locked:
-                st.markdown(f'<div class="tutorial-box"><h3>📊 進度導引</h3><p>達成各階級任務數量即可獲得聚會當天的抽獎券。</p><div class="tutorial-footer"><span class="t-badge">訓練進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="tutorial-box"><h3>📊 進度導引</h3><p>達成各階級任務數量即可獲得抽獎券。</p><div class="tutorial-footer"><span class="t-badge">訓練進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
                 if st.button("我已了解進度規則", key="btn_t2", use_container_width=True): handle_tutorial('tuto_prog')
             
             st.subheader("📊 任務完成度統計")
@@ -192,10 +185,10 @@ if df_users is not None:
         with tabs[2]:
             is_locked = not st.session_state.t_done.get('tuto_gamble', False)
             if is_locked:
-                st.markdown(f'<div class="tutorial-box"><h3>🎰 博弈導引</h3><p>每一張抽獎券都可以在此博弈。大獲全勝或一無所有！勝率 75%。</p><div class="tutorial-footer"><span class="t-badge">訓練進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="tutorial-box"><h3>🎰 博弈導引</h3><p>消耗獎券即可博弈，勝率 75%。</p><div class="tutorial-footer"><span class="t-badge">訓練進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
                 if st.button("我已了解博弈規則", key="btn_t4", use_container_width=True): handle_tutorial('tuto_gamble')
             
-            st.markdown('<div class="casino-zone"><h2>🎰 特工地下城</h2><p>搏一搏，獎券變摩托。勝率 75%</p></div>', unsafe_allow_html=True)
+            st.markdown('<div class="casino-zone"><h2>🎰 特工地下城</h2><p>這裡是命運的分叉路。勝率 75%</p></div>', unsafe_allow_html=True)
             if total_tickets < 1: st.error("❌ 餘額不足，無法下注。")
             else:
                 if st.button("🧧 消耗 1 張下注！", use_container_width=True):
@@ -226,12 +219,12 @@ if df_users is not None:
                         st.session_state.g_res = {"t": r_t, "m": r_m, "s": r_s}
                         st.cache_data.clear(); st.rerun()
 
-            # 博弈結果大氣彈窗
-            if st.session_state.g_res:
+            # 博弈結果彈窗
+            if 'g_res' in st.session_state and st.session_state.g_res:
                 res = st.session_state.g_res
                 if res['s'] == "win": 
                     st.balloons()
-                    st.markdown(f'<div class="win-card"><h2>{res["t"]}</h2><p>{res["m"]}</p><small>#公衛特工賭神</small></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="win-card"><h2>{res["t"]}</h2><p>{res["m"]}</p></div>', unsafe_allow_html=True)
                 elif res['s'] == "draw": st.info(res['m'])
                 else: st.error(res['m'])
                 if st.button("繼續挑戰"): st.session_state.g_res = None; st.rerun()
@@ -244,9 +237,9 @@ if df_users is not None:
                 if st.button("我已了解設定功能", key="btn_t3", use_container_width=True): handle_tutorial('tuto_set')
             
             st.subheader("⚙️ 帳號身份設定")
-            new_nick = st.text_input("修改代號 (匿蹤用)", value=safe_str(user.get("Nickname(變更暱稱)", "")))
+            new_nick = st.text_input("修改特工代號", value=safe_str(user.get("Nickname(變更暱稱)", "")))
             new_pwd = st.text_input("自訂登入密碼", type="password", placeholder="留空則不修改")
-            if st.button("💾 同步更新檔案"):
+            if st.button("💾 同步更新"):
                 if is_locked: st.warning("⚠️ 請先閱讀上方設定指引")
                 else:
                     df_users['Nickname(變更暱稱)'] = df_users['Nickname(變更暱稱)'].astype(object)
@@ -265,11 +258,10 @@ if df_users is not None:
                         <h1 style="color:#FFC107; margin:0;">🎊 培訓合格 🎊</h1>
                         <p style="font-size:1.2rem; margin-top:10px;">你已集齊 4/4 份情報說明，正式晉升特工！</p>
                         <h2 style="background:#FFC107; color:white; display:inline-block; padding:5px 20px; border-radius:10px;">🎁 獎勵：+1 張抽獎券</h2>
-                        <p style="color:#8C8C8C; margin-top:15px;">獎勵已存入你的檔案。快去執行任務賺取更多籌碼吧！</p>
                     </div>
                 """, unsafe_allow_html=True)
                 if st.button("立即出動！", use_container_width=True): 
                     st.session_state.p_shown = True
                     st.rerun()
 
-else: st.error("❌ 無法連線至觀測站資料庫")
+else: st.error("❌ 無法連線至總部")
