@@ -3,23 +3,20 @@ import pandas as pd
 import cloudinary
 import cloudinary.uploader
 from streamlit_gsheets import GSheetsConnection
-import datetime
 
-# --- 1. 質感設定 (Muji 暖米色調) ---
+# --- 1. 質感設定 ---
 st.set_page_config(page_title="📸 拍拍挑戰：特工觀察", layout="centered")
 st.markdown("""
     <style>
     .stApp { background-color: #F5F5F0; }
     h1, h2, h3, p, label { color: #5F5F5F !important; font-family: 'Noto Sans TC', sans-serif; }
     .stButton>button { background-color: #FFFFFF; color: #5F5F5F; border: 1px solid #D9D9D9; border-radius: 2px; width: 100%; }
-    .stButton>button:hover { border: 1px solid #8C8C8C; background-color: #F9F9F9; }
     .mission-card { background-color: #FFFFFF; padding: 18px; border: 1px solid #E6E6E1; border-radius: 4px; margin-bottom: 12px; }
     .polaroid { background-color: white; padding: 12px; border: 1px solid #E6E6E1; box-shadow: 2px 2px 8px rgba(0,0,0,0.05); text-align: center; }
-    .upload-zone { border: 2px dashed #D9D9D9; padding: 20px; border-radius: 4px; background-color: #FCFCFA; margin-top: 15px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 外部服務配置 (Cloudinary & GSheets) ---
+# --- 2. 外部服務配置 ---
 cloudinary.config(
     cloud_name = st.secrets["CLOUDINARY_CLOUD_NAME"],
     api_key = st.secrets["CLOUDINARY_API_KEY"],
@@ -27,39 +24,27 @@ cloudinary.config(
     secure = True
 )
 
-# [核心設定] 定義妳的試算表網址
+# 試算表網址 (請確認這個網址有分享給 JSON 裡面的 client_email)
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1cxSA5qvLKmu2FjYR2xZI3fdSocXS_VCOXYUdk6C0YVA/edit?usp=sharing"
 
-# 初始化 Google Sheets 連線
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=5)
 def load_data():
     try:
-        # 🕵️‍♂️ [偵探功能啟動]：取得這份試算表所有分頁的清單
-        # 使用 conn.client (gspread) 來直接與試算表通訊
-        all_sheets = conn.client.open_by_url(GSHEET_URL).worksheets()
-        names = [s.title for s in all_sheets]
-        
-        # 在網頁頂端印出目前有的分頁名字，方便除錯
-        st.info(f"🔍 總部回報！我目前在試算表看到的分頁有：{names}")
-        
-        # 讀取 user 分頁
+        # [最穩定讀取法] 
+        # 請務必確認妳的 Google Sheet 下方分頁名稱真的是 "user" 和 "task" (全小寫且無空格)
         users = conn.read(spreadsheet=GSHEET_URL, worksheet="user")
-        # 讀取 task 分頁
         tasks = conn.read(spreadsheet=GSHEET_URL, worksheet="task")
-        
         return users, tasks
     except Exception as e:
-        st.error(f"📡 連線成功但讀取失敗：{e}")
-        st.info("請檢查 Secrets 裡的身分證內容，以及 Google Sheets 是否已分享給該 client_email。")
+        st.error(f"📡 報告指揮官！連線成功，但讀取分頁時卡住了。")
+        st.warning(f"詳細錯誤訊息：{e}")
+        st.info("💡 小撇步：請去 Google Sheet 檢查左下角的分頁標籤，名稱必須是 user (不是 User)，且前後不能有空白喔！")
         return None, None
 
 # --- 3. 核心邏輯 ---
-level_info = {
-    "A": "【 潛伏訊號 】", "B": "【 視角破解 】", "C": "【 迷霧追蹤 】", 
-    "D": "【 極限干蝕 】", "E": "【 傳奇解密 】"
-}
+level_info = {"A": "【 潛伏訊號 】", "B": "【 視角破解 】", "C": "【 迷霧追蹤 】", "D": "【 極限干蝕 】", "E": "【 傳奇解密 】"}
 
 def calculate_total_tickets(user_row):
     try:
@@ -68,22 +53,17 @@ def calculate_total_tickets(user_row):
         return (a // 5) + (b // 3) + (c // 2) + (d * 1) + (e * 2)
     except: return 0
 
-# --- 4. 初始化 Session State ---
 if 'login' not in st.session_state:
-    st.session_state.update({
-        'login': False, 'student_id': None, 
-        'locked_task': None, 'locked_diff': None,
-        'selected_lvl': "A"
-    })
+    st.session_state.update({'login': False, 'student_id': None, 'locked_task': None, 'locked_diff': None, 'selected_lvl': "A"})
 
 # 執行讀取
 df_users, df_tasks = load_data()
 
-# --- 5. 流程分層 ---
+# --- 4. 流程分層 ---
 if df_users is not None and df_tasks is not None:
     if not st.session_state.login:
-        # --- 登入介面 ---
         st.title("🍂 拍照觀察員：身分登入")
+        # 這裡會自動從試算表中抓取姓名清單
         name_list = df_users["name(姓名)"].dropna().tolist()
         selected_name = st.selectbox("帳號 (預設為姓名)", ["搜尋名字"] + name_list)
         input_pwd = st.text_input("密碼 (預設為學號)", type="password")
@@ -102,12 +82,10 @@ if df_users is not None and df_tasks is not None:
                 else: st.error("密碼錯誤。")
 
     else:
-        # --- 已登入：特工個人空間 ---
+        # --- 已登入：特工空間 ---
         user_idx = df_users[df_users["Student ID(預設密碼)"].astype(str).str.strip() == st.session_state.student_id].index[0]
         user = df_users.iloc[user_idx]
-        
-        display_name = user["Nickname(變更暱稱)"] if pd.notna(user["Nickname(變更暱稱)"]) and str(user["Nickname(變更暱稱)"]).strip() != "" else user["name(姓名)"]
-        st.title(f"📝 {display_name} 的特工記憶庫")
+        st.title(f"📝 {user['name(姓名)']} 的特工記憶庫")
 
         with st.expander("🖼️ 查看我已回傳的觀察紀錄"):
             photo_val = user.get("photo_list")
@@ -119,18 +97,16 @@ if df_users is not None and df_tasks is not None:
                 cols = st.columns(3)
                 for i, u in enumerate(p_urls):
                     with cols[i % 3]:
-                        thumb = u.replace("/upload/", "/upload/w_400,q_auto:eco/")
+                        thumb = u.strip().replace("/upload/", "/upload/w_400,q_auto:eco/")
                         st.markdown(f'<div class="polaroid"><img src="{thumb}" style="width:100%;"></div>', unsafe_allow_html=True)
                         st.caption(t_names[i] if i < len(t_names) else "")
 
-        st.write("---")
         tab1, tab2, tab3 = st.tabs(["🎯 任務挑選", "📊 進度瀏覽", "⚙️ 設定"])
 
         with tab1:
             btn_cols = st.columns(5)
             for i, lvl in enumerate(["A", "B", "C", "D", "E"]):
-                if btn_cols[i].button(lvl, key=f"btn_{lvl}", help=level_info[lvl]):
-                    st.session_state.selected_lvl = lvl
+                if btn_cols[i].button(lvl, key=f"btn_{lvl}"): st.session_state.selected_lvl = lvl
             
             curr_lvl = st.session_state.selected_lvl
             st.markdown(f"**當前查閱：{level_info[curr_lvl]}**")
@@ -144,18 +120,18 @@ if df_users is not None and df_tasks is not None:
                         st.toast(f"已選定：{task['title']}")
 
             if st.session_state.locked_task:
-                st.markdown('<div class="upload-zone">', unsafe_allow_html=True)
+                st.write("---")
                 st.subheader(f"📡 情報回傳：{st.session_state.locked_task}")
                 up_file = st.file_uploader("上傳觀察證物", type=['png', 'jpg', 'jpeg'], key="agent_upload")
                 
                 if up_file:
-                    st.image(up_file, width=200, caption="準備回傳的草稿")
                     if st.button("🚀 正式回傳總部"):
                         with st.spinner("同步至雲端中..."):
                             try:
                                 res = cloudinary.uploader.upload(up_file, folder="CSMU_AGENT", transformation=[{'width': 800, 'crop': "limit"}, {'quality': "auto:eco"}])
                                 img_url = res["secure_url"]
                                 
+                                # 更新數據
                                 old_p = str(user.get("photo_list", ""))
                                 df_users.at[user_idx, "photo_list"] = img_url if old_p in ["nan", ""] else f"{old_p},{img_url}"
                                 old_t = str(user.get("task_list", ""))
@@ -165,7 +141,7 @@ if df_users is not None and df_tasks is not None:
                                 current_count = int(user.get(diff_col, 0)) if pd.notna(user.get(diff_col)) else 0
                                 df_users.at[user_idx, diff_col] = current_count + 1
                                 
-                                # 使用 Service Account 連線更新
+                                # [修正點] 寫回資料庫，使用正確的變數名稱 df_users
                                 conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users)
                                 
                                 st.balloons()
@@ -173,7 +149,6 @@ if df_users is not None and df_tasks is not None:
                                 st.cache_data.clear()
                                 st.rerun()
                             except Exception as e: st.error(f"同步失敗：{e}")
-                st.markdown('</div>', unsafe_allow_html=True)
 
         with tab2:
             for lvl in ["A", "B", "C", "D", "E"]:
@@ -199,4 +174,4 @@ if df_users is not None and df_tasks is not None:
             st.markdown("### 📍 目前選定目標")
             st.info(st.session_state.locked_task if st.session_state.locked_task else "尚未鎖定")
 
-else: st.error("❌ 無法讀取資料庫。")
+else: st.error("❌ 目前無法讀取總部資料庫。")
