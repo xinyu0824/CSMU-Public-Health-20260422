@@ -163,7 +163,7 @@ if df_users is not None:
                                 df_users.at[user_idx, diff_col] = current_count + 1
                                 
                                 # 3. [核心功能] 將整份 DataFrame 直接寫回 Google Sheets
-                                conn.update(worksheet="users", data=df_users)
+                                conn.update(worksheet="user", data=df_user)
                                 
                                 st.balloons()
                                 st.success("✅ 情報同步完成！您的進度已更新。")
