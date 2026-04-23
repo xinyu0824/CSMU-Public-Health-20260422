@@ -223,7 +223,7 @@ if df_users is not None:
                 for _, task in filtered.iterrows():
                     with st.container():
                         st.markdown(f'<div class="mission-card"><b>{task["title"]}</b><br><small>{task["content"]}</small></div>', unsafe_allow_html=True)
-                        if st.button("鎖定此任務, key=f"lock_{task['title']}"):
+                        if st.button("鎖定此任務", key=f"lock_{task['title']}"):
                             st.session_state.locked_task, st.session_state.locked_diff = task['title'], st.session_state.selected_lvl
                             st.toast(f"已選定：{task['title']}")
 
