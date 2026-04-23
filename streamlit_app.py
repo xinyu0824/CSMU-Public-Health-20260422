@@ -209,7 +209,7 @@ if df_users is not None:
                 st.session_state.locked_task = "新手引導：初試身心"
                 st.session_state.locked_diff = "A" 
             else:
-                st.write("### 📍 難度分級)
+                st.write("### 📍 難度分級")
                 diff_options = ["A", "B", "C", "D", "E"]
                 selected_lvl = st.radio("難度分區", options=diff_options, index=diff_options.index(st.session_state.selected_lvl), horizontal=True, label_visibility="collapsed")
                 
