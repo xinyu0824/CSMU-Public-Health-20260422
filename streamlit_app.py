@@ -4,7 +4,7 @@ import cloudinary
 import cloudinary.uploader
 from streamlit_gsheets import GSheetsConnection
 
-# --- 1. 質感設定 ---
+# --- 1. 質感設定 (Muji 暖米色調) ---
 st.set_page_config(page_title="📸 拍拍挑戰：特工觀察", layout="centered")
 st.markdown("""
     <style>
@@ -16,7 +16,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 配置 ---
+# --- 2. 外部服務配置 ---
 cloudinary.config(
     cloud_name = st.secrets["CLOUDINARY_CLOUD_NAME"],
     api_key = st.secrets["CLOUDINARY_API_KEY"],
@@ -75,21 +75,17 @@ if df_users is not None:
             match = df_users[df_users["name(姓名)"] == selected_name]
             if not match.empty:
                 user_row = match.iloc[0]
-                # 比對前同時進行清理
                 db_id = clean_id_logic(user_row["Student ID(預設密碼)"])
                 db_custom_pwd = str(user_row.get("password(自訂密碼)", "")).strip()
                 if db_custom_pwd.lower() == "nan": db_custom_pwd = ""
-                
                 correct_answer = db_custom_pwd if db_custom_pwd != "" else db_id
-                
                 if input_pwd.strip() == correct_answer:
                     st.session_state.login = True
                     st.session_state.student_id = db_id
                     st.rerun()
                 else: st.error("密碼錯誤，請檢查學號格式。")
     else:
-        # 已登入：精準抓取索引
-        # 先幫表格裡的學號欄位全部「去 0 化」
+        # 已登入
         temp_ids = df_users["Student ID(預設密碼)"].apply(clean_id_logic)
         user_matches = df_users[temp_ids == st.session_state.student_id]
         
@@ -99,7 +95,6 @@ if df_users is not None:
         user = user_matches.iloc[0]
         user_idx = user_matches.index[0]
         
-        # 暱稱顯示邏輯
         nick = str(user.get("Nickname(變更暱稱)", "")).strip()
         disp_name = nick if (nick != "" and nick.lower() != "nan") else user["name(姓名)"]
         st.title(f"📝 {disp_name} 的特工記憶庫")
@@ -141,23 +136,26 @@ if df_users is not None:
                 up_file = st.file_uploader("上傳證物照片", type=['png', 'jpg', 'jpeg'], key="agent_upload")
                 if up_file:
                     if st.button("🚀 正式回傳總部"):
-                        with st.spinner("情報上傳中..."):
+                        with st.spinner("情報傳輸中..."):
                             try:
                                 res = cloudinary.uploader.upload(up_file, folder="CSMU_AGENT", transformation=[{'width': 800, 'quality': "auto:eco"}])
                                 img_url = res["secure_url"]
                                 
-                                # --- 關鍵數據更新策略 ---
-                                # 1. 處理照片網址 (強迫轉字串)
+                                # [核心修正] 更新前，先將整張表可能出錯的欄位轉為 object 型態
+                                df_users['photo_list'] = df_users['photo_list'].astype(object)
+                                df_users['task_list'] = df_users['task_list'].astype(object)
+                                
+                                # 處理網址
                                 current_p = str(df_users.at[user_idx, "photo_list"]).strip()
                                 if current_p.lower() == "nan": current_p = ""
                                 df_users.at[user_idx, "photo_list"] = img_url if current_p == "" else f"{current_p},{img_url}"
                                 
-                                # 2. 處理任務名稱 (強迫轉字串)
+                                # 處理任務名稱
                                 current_t = str(df_users.at[user_idx, "task_list"]).strip()
                                 if current_t.lower() == "nan": current_t = ""
                                 df_users.at[user_idx, "task_list"] = st.session_state.locked_task if current_t == "" else f"{current_t},{st.session_state.locked_task}"
                                 
-                                # 3. 處理進度次數 (強迫轉數字)
+                                # 處理次數
                                 diff_col = f"done_{st.session_state.locked_diff}"
                                 try:
                                     raw_val = df_users.at[user_idx, diff_col]
@@ -165,7 +163,7 @@ if df_users is not None:
                                 except: val = 0
                                 df_users.at[user_idx, diff_col] = val + 1
                                 
-                                # 寫回資料庫 (不強迫全表轉型，讓 Pandas 自行處理)
+                                # 寫回資料庫
                                 conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users)
                                 st.balloons(); st.success("回傳成功！"); st.cache_data.clear(); st.rerun()
                             except Exception as e: st.error(f"同步失敗：{e}")
@@ -185,9 +183,14 @@ if df_users is not None:
             new_nick = st.text_input("自訂暱稱", value=disp_name)
             new_pwd = st.text_input("自訂密碼", type="password", placeholder="留空不修改")
             if st.button("儲存並同步"):
-                df_users.at[user_idx, "Nickname(變更暱稱)"] = new_nick
+                # 設定修改也同樣加上型別保護
+                df_users['Nickname(變更暱稱)'] = df_users['Nickname(變更暱稱)'].astype(object)
+                df_users['password(自訂密碼)'] = df_users['password(自訂密碼)'].astype(object)
+                
+                df_users.at[user_idx, "Nickname(變更暱稱)"] = str(new_nick)
                 if new_pwd.strip() != "":
-                    df_users.at[user_idx, "password(自訂密碼)"] = new_pwd
+                    df_users.at[user_idx, "password(自訂密碼)"] = str(new_pwd)
+                
                 conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users)
                 st.success("同步完成！"); st.cache_data.clear(); st.rerun()
             if st.button("🚪 登出"):
