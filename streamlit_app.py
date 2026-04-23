@@ -33,8 +33,8 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 @st.cache_data(ttl=5)
 def load_data():
     # [核心功能] 從雲端讀取最新的使用者與任務表
-    users = conn.read(worksheet="users")
-    tasks = conn.read(worksheet="tasks")
+    users = conn.read(worksheet="user")
+    tasks = conn.read(worksheet="task")
     return users, tasks
 
 # --- 3. 核心邏輯 ---
