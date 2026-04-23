@@ -9,11 +9,11 @@ st.set_page_config(page_title="📸 拍拍挑戰：特工觀察", layout="center
 
 # [核心功能] 稱號門檻設定
 def get_agent_rank(tickets, photo_count):
-    if photo_count == 0: return "🆕 待命特工"
-    if tickets >= 11: return "🌌 傳奇拍"
-    elif tickets >= 7: return "🎖️ 大師拍"
-    elif tickets >= 4: return "🛡️ 菁英拍"
-    else: return "🌱 實習拍"
+    if photo_count == 0: return "🆕尚未有稱號"
+    if tickets >= 11: return "🌌 傳奇拍拍"
+    elif tickets >= 7: return "🎖️ 大師拍拍"
+    elif tickets >= 4: return "🛡️ 菁英拍拍"
+    else: return "🌱 實習拍拍"
 
 # CSS 深度美化
 st.markdown("""
@@ -101,7 +101,7 @@ GSHEET_URL = "https://docs.google.com/spreadsheets/d/1cxSA5qvLKmu2FjYR2xZI3fdSoc
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # 全局難度
-level_info = {"A": "【 潛伏訊號 】", "B": "【 視角破解 】", "C": "【 迷霧追蹤 】", "D": "【 極限干蝕 】", "E": "【 傳奇解密 】"}
+level_info = {"A ": "【初階】", "B ": "【 中下階 】", "C ": "【 中上階 】", "D ": "【 高階 】", "E ": "【 傳奇 】"}
 
 def clean_id_logic(val):
     if pd.isna(val) or str(val).strip().lower() == "nan": return ""
@@ -133,9 +133,9 @@ df_users, df_tasks = load_data()
 if df_users is not None:
     if not st.session_state.login:
         # --- 登入介面 ---
-        st.title("🍂 拍照觀察員：身分登入")
+        st.title("🍂公衛一甲：身分登入")
         name_list = df_users["name(姓名)"].dropna().tolist()
-        selected_name = st.selectbox("帳號 (姓名)", ["搜尋名字"] + name_list)
+        selected_name = st.selectbox("帳號 (預設姓名) *登入後可變更暱稱", ["搜尋名字"] + name_list)
         input_pwd = st.text_input("密碼 (預設學號)", type="password")
         if st.button("確認進入"):
             match = df_users[df_users["name(姓名)"] == selected_name]
@@ -173,14 +173,14 @@ if df_users is not None:
         st.markdown(f'<div class="title-wrapper"><span class="agent-badge">{rank_label}</span><span class="main-title">{disp_name} 的特工記憶庫</span></div>', unsafe_allow_html=True)
 
         with st.sidebar:
-            st.markdown(f"### 🎖️ 特工檔案\n**稱號：** {rank_label}\n**獎券：** {total_tickets} 張")
+            st.markdown(f"### 🎖️個人檔案\n**稱號：** {rank_label}\n**導生聚抽獎券：** {total_tickets} 張")
             st.write("---")
             if st.session_state.locked_task:
-                st.info(f"鎖定目標：\n{st.session_state.locked_task}")
+                st.info(f"鎖定任務：\n{st.session_state.locked_task}")
             if st.button("🚪 登出系統"):
                 st.session_state.login = False; st.rerun()
 
-        with st.expander("🖼️ 我的觀察紀錄 (已上傳情報)"):
+        with st.expander("🖼️ 我的任務紀錄 (已上傳圖片)"):
             if photo_count == 0:
                 st.info("🌑 尚未有紀錄。")
             else:
@@ -193,23 +193,23 @@ if df_users is not None:
                         st.markdown(f'<div class="polaroid"><img src="{thumb}" style="width:100%;"></div>', unsafe_allow_html=True)
                         st.caption(t_names[i] if i < len(t_names) else "")
 
-        tab1, tab2, tab3 = st.tabs(["🎯 任務挑選", "📊 進度結算", "⚙️ 設定"])
+        tab1, tab2, tab3 = st.tabs(["🎯 任務選取", "📊 進度追蹤", "⚙️ 帳號設定"])
 
         with tab1:
             if is_newbie:
                 st.markdown("""
                     <div class="tutorial-card">
                         <h3>👋 你好，歡迎加入拍拍挑戰！</h3>
-                        <p>目前你尚未獲得任何稱號。完成下方的新手引導任務，即可正式晉升為特工並開啟完整難度區域。</p>
+                        <p>目前你尚未獲得任何稱號。完成下方的新手引導任務，即可正式獲得稱號，並開啟A至E難度區域，任意挑選任務。</p>
                         <hr>
-                        <b>🚩 新手引導任務：初試身心</b><br>
-                        <small>拍攝一張校園內讓你感到「有學習氛圍」或「充滿回憶」的角落照片。</small>
+                        <b>🚩 新手引導任務：快試試看</b><br>
+                        <small>拍攝任意一張校園內的角落照片，或者具有學習氛圍之照片，上傳至底下。</small>
                     </div>
                 """, unsafe_allow_html=True)
                 st.session_state.locked_task = "新手引導：初試身心"
                 st.session_state.locked_diff = "A" 
             else:
-                st.write("### 📍 步驟一：選擇難度區域")
+                st.write("### 📍 難度分級)
                 diff_options = ["A", "B", "C", "D", "E"]
                 selected_lvl = st.radio("難度分區", options=diff_options, index=diff_options.index(st.session_state.selected_lvl), horizontal=True, label_visibility="collapsed")
                 
@@ -223,17 +223,17 @@ if df_users is not None:
                 for _, task in filtered.iterrows():
                     with st.container():
                         st.markdown(f'<div class="mission-card"><b>{task["title"]}</b><br><small>{task["content"]}</small></div>', unsafe_allow_html=True)
-                        if st.button("鎖定此目標", key=f"lock_{task['title']}"):
+                        if st.button("鎖定此任務, key=f"lock_{task['title']}"):
                             st.session_state.locked_task, st.session_state.locked_diff = task['title'], st.session_state.selected_lvl
                             st.toast(f"已選定：{task['title']}")
 
             if st.session_state.locked_task:
                 st.write("---")
-                st.subheader(f"📡 情報回傳：{st.session_state.locked_task}")
+                st.subheader(f"任務：{st.session_state.locked_task}")
                 up_file = st.file_uploader("選取照片", type=['png', 'jpg', 'jpeg'], key=f"up_{st.session_state.locked_task}")
                 if up_file:
-                    if st.button("🚀 正式回傳總部"):
-                        with st.spinner("同步中..."):
+                    if st.button("🚀正式回傳總部"):
+                        with st.spinner("上傳中..."):
                             try:
                                 res = cloudinary.uploader.upload(up_file, folder="CSMU_AGENT", transformation=[{'width': 800, 'quality': "auto:eco"}])
                                 img_url = res["secure_url"]
@@ -254,7 +254,7 @@ if df_users is not None:
                                 
                                 conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users)
                                 st.balloons()
-                                if is_newbie: st.success("🎉 恭喜完成新手任務！你已正式晉升為 🌱 實習拍。")
+                                if is_newbie: st.success("🎉 恭喜完成新手任務！你已正式晉升為 🌱 實習拍拍。")
                                 else: st.success("回傳成功！")
                                 st.cache_data.clear(); st.rerun()
                             except Exception as e: st.error(f"同步失敗：{e}")
@@ -271,8 +271,8 @@ if df_users is not None:
 
         with tab3:
             st.subheader("⚙️ 設定")
-            new_nick = st.text_input("更換暱稱", value=disp_name)
-            new_pwd = st.text_input("修改自訂密碼", type="password", placeholder="留空不修改")
+            new_nick = st.text_input("修改暱稱", value=disp_name)
+            new_pwd = st.text_input("自訂密碼", type="password", placeholder="留空不修改")
             if st.button("同步設定"):
                 # [關鍵修正] 更新前強制轉型，防止 float64 報錯
                 df_users['Nickname(變更暱稱)'] = df_users['Nickname(變更暱稱)'].astype(object)
