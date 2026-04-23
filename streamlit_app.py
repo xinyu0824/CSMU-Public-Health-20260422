@@ -4,19 +4,20 @@ import cloudinary
 import cloudinary.uploader
 from streamlit_gsheets import GSheetsConnection
 
-# --- 1. 質感設定 ---
+# --- 1. 質感設定 (Muji 暖米色調) ---
 st.set_page_config(page_title="📸 拍拍挑戰：特工觀察", layout="centered")
 st.markdown("""
     <style>
     .stApp { background-color: #F5F5F0; }
     h1, h2, h3, p, label { color: #5F5F5F !important; font-family: 'Noto Sans TC', sans-serif; }
     .stButton>button { background-color: #FFFFFF; color: #5F5F5F; border: 1px solid #D9D9D9; border-radius: 2px; width: 100%; }
+    .stButton>button:hover { border: 1px solid #8C8C8C; background-color: #F9F9F9; }
     .mission-card { background-color: #FFFFFF; padding: 18px; border: 1px solid #E6E6E1; border-radius: 4px; margin-bottom: 12px; }
     .polaroid { background-color: white; padding: 12px; border: 1px solid #E6E6E1; box-shadow: 2px 2px 8px rgba(0,0,0,0.05); text-align: center; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 配置 ---
+# --- 2. 外部服務配置 ---
 cloudinary.config(
     cloud_name = st.secrets["CLOUDINARY_CLOUD_NAME"],
     api_key = st.secrets["CLOUDINARY_API_KEY"],
@@ -27,37 +28,52 @@ cloudinary.config(
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1cxSA5qvLKmu2FjYR2xZI3fdSocXS_VCOXYUdk6C0YVA/edit?usp=sharing"
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-@st.cache_data(ttl=5)
-def load_data():
+# --- 核心邏輯：計算抽獎券 ---
+def calculate_total_tickets(user_row):
     try:
-        users = conn.read(spreadsheet=GSHEET_URL, worksheet="user")
-        tasks = conn.read(spreadsheet=GSHEET_URL, worksheet="task")
-        
-        # [關鍵修正] 強制轉換特定欄位為字串，避免 float64 錯誤
-        str_cols = ['photo_list', 'task_list', 'Nickname(變更暱稱)', 'password(自訂密碼)', 'Student ID(預設密碼)']
-        for col in str_cols:
-            if col in users.columns:
-                users[col] = users[col].astype(str).replace(['nan', 'None', ''], '')
-                
-        return users, tasks
-    except Exception as e:
-        st.error(f"📡 總部連線失敗：{e}")
-        return None, None
+        def clean_val(v):
+            if pd.isna(v) or str(v).strip() == "" or str(v).lower() == "nan": return 0
+            return int(float(v))
+        a = clean_val(user_row.get('done_A', 0))
+        b = clean_val(user_row.get('done_B', 0))
+        c = clean_val(user_row.get('done_C', 0))
+        d = clean_val(user_row.get('done_D', 0))
+        e = clean_val(user_row.get('done_E', 0))
+        return (a // 5) + (b // 3) + (c // 2) + (d * 1) + (e * 2)
+    except: return 0
 
+# --- 核心邏輯：清理 ID 與資料 ---
 def clean_id(val):
     s = str(val).strip()
     if s.endswith('.0'): s = s[:-2]
     return s
 
-# --- 3. 邏輯定義 ---
-level_info = {"A": "【 潛伏訊號 】", "B": "【 視角破解 】", "C": "【 迷霧追蹤 】", "D": "【 極限干蝕 】", "E": "【 傳奇解密 】"}
+@st.cache_data(ttl=5)
+def load_data():
+    try:
+        users = conn.read(spreadsheet=GSHEET_URL, worksheet="user")
+        tasks = conn.read(spreadsheet=GSHEET_URL, worksheet="task")
+        # [關鍵修正] 強制轉換欄位為字串，徹底解決 float64 錯誤
+        str_cols = ['photo_list', 'task_list', 'Nickname(變更暱稱)', 'password(自訂密碼)', 'Student ID(預設密碼)']
+        for col in str_cols:
+            if col in users.columns:
+                users[col] = users[col].astype(str).replace(['nan', 'None', ''], '')
+        return users, tasks
+    except Exception as e:
+        st.error(f"📡 總部連線失敗：{e}")
+        return None, None
 
+# --- 4. 初始化 Session State ---
 if 'login' not in st.session_state:
-    st.session_state.update({'login': False, 'student_id': None, 'locked_task': None, 'locked_diff': None, 'selected_lvl': "A"})
+    st.session_state.update({
+        'login': False, 'student_id': None, 
+        'locked_task': None, 'locked_diff': None,
+        'selected_lvl': "A"
+    })
 
 df_users, df_tasks = load_data()
 
-# --- 4. 流程分層 ---
+# --- 5. 流程分層 ---
 if df_users is not None:
     if not st.session_state.login:
         st.title("🍂 拍照觀察員：身分登入")
@@ -77,14 +93,16 @@ if df_users is not None:
                     st.session_state.login = True
                     st.session_state.student_id = real_id
                     st.rerun()
-                else: st.error("密碼錯誤。")
+                else: st.error("密碼錯誤，請檢查大小寫或學號格式。")
     else:
         # 已登入：抓取用戶索引
         df_users["Student ID(預設密碼)"] = df_users["Student ID(預設密碼)"].apply(clean_id)
         user_matches = df_users[df_users["Student ID(預設密碼)"] == st.session_state.student_id]
         
         if user_matches.empty:
-            st.error("找不到資料"); st.stop()
+            st.error("找不到資料，請嘗試重新登入。")
+            if st.button("登出重試"): st.session_state.login = False; st.rerun()
+            st.stop()
             
         user = user_matches.iloc[0]
         user_idx = user_matches.index[0]
@@ -93,9 +111,9 @@ if df_users is not None:
         st.title(f"📝 {disp_name} 的特工記憶庫")
 
         with st.expander("🖼️ 我的觀察紀錄"):
-            p_val = user["photo_list"]
+            p_val = str(user["photo_list"]).strip()
             if p_val == "":
-                st.info("🌑 尚未有紀錄。")
+                st.info("🌑 尚未有解碼紀錄，快去完成任務吧！")
             else:
                 p_urls = p_val.split(",")
                 t_names = str(user.get("task_list", "")).split(",")
@@ -115,6 +133,8 @@ if df_users is not None:
                 if btn_cols[i].button(lvl, key=f"btn_{lvl}"): st.session_state.selected_lvl = lvl
             
             curr_lvl = st.session_state.selected_lvl
+            st.markdown(f"**當前查閱：{level_info[curr_lvl]}**")
+            
             filtered = df_tasks[df_tasks['difficulty'].astype(str).str.strip() == curr_lvl]
             for _, task in filtered.iterrows():
                 with st.container():
@@ -126,25 +146,24 @@ if df_users is not None:
             if st.session_state.locked_task:
                 st.write("---")
                 st.subheader(f"📡 情報回傳：{st.session_state.locked_task}")
-                up_file = st.file_uploader("上傳證物", type=['png', 'jpg', 'jpeg'])
+                up_file = st.file_uploader("上傳證物 (建議縮小尺寸)", type=['png', 'jpg', 'jpeg'])
                 if up_file:
-                    if st.button("🚀 正式回傳"):
+                    if st.button("🚀 正式回傳總部"):
                         with st.spinner("同步中..."):
                             try:
                                 res = cloudinary.uploader.upload(up_file, folder="CSMU_AGENT", transformation=[{'width': 800, 'quality': "auto:eco"}])
                                 img_url = res["secure_url"]
                                 
-                                # 更新 DataFrame
-                                current_p = df_users.at[user_idx, "photo_list"]
+                                # 更新數據 (強制轉為字串避免 float64 報錯)
+                                current_p = str(df_users.at[user_idx, "photo_list"]).strip()
                                 df_users.at[user_idx, "photo_list"] = img_url if current_p == "" else f"{current_p},{img_url}"
                                 
-                                current_t = df_users.at[user_idx, "task_list"]
+                                current_t = str(df_users.at[user_idx, "task_list"]).strip()
                                 df_users.at[user_idx, "task_list"] = st.session_state.locked_task if current_t == "" else f"{current_t},{st.session_state.locked_task}"
                                 
                                 diff_col = f"done_{st.session_state.locked_diff}"
-                                current_count = user.get(diff_col, 0)
                                 try:
-                                    val = int(current_count) if pd.notna(current_count) and current_count != "" else 0
+                                    val = int(float(df_users.at[user_idx, diff_col])) if pd.notna(df_users.at[user_idx, diff_col]) and str(df_users.at[user_idx, diff_col]) != "" else 0
                                 except: val = 0
                                 df_users.at[user_idx, diff_col] = val + 1
                                 
@@ -154,9 +173,10 @@ if df_users is not None:
                             except Exception as e: st.error(f"回傳失敗：{e}")
 
         with tab2:
+            st.subheader("📊 任務完成度")
             for lvl in ["A", "B", "C", "D", "E"]:
                 count = user.get(f"done_{lvl}", 0)
-                try: val = int(count) if pd.notna(count) and count != "" else 0
+                try: val = int(float(count)) if pd.notna(count) and str(count) != "" else 0
                 except: val = 0
                 st.write(f"{level_info[lvl]}： {val} / 5")
                 st.progress(min(val/5, 1.0))
@@ -165,10 +185,10 @@ if df_users is not None:
         with tab3:
             st.subheader("⚙️ 個人設定")
             new_nick = st.text_input("更換暱稱", value=user["Nickname(變更暱稱)"])
-            new_pwd = st.text_input("修改密碼", type="password", placeholder="留空則不修改")
+            new_pwd = st.text_input("修改自訂密碼", type="password", placeholder="留空則不修改")
             
             if st.button("💾 同步設定至總部"):
-                with st.spinner("更新中..."):
+                with st.spinner("更新檔案中..."):
                     df_users.at[user_idx, "Nickname(變更暱稱)"] = new_nick
                     if new_pwd.strip() != "":
                         df_users.at[user_idx, "password(自訂密碼)"] = new_pwd
@@ -182,6 +202,7 @@ if df_users is not None:
 
     with st.sidebar:
         if st.session_state.login:
-            st.markdown("### 📍 目前目標")
+            st.markdown("### 📍 目前選定目標")
             st.info(st.session_state.locked_task if st.session_state.locked_task else "尚未鎖定")
-else: st.error("❌ 無法連線")
+else:
+    st.error("❌ 目前無法讀取總部資料庫。")
