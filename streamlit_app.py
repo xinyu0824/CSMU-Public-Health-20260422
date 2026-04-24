@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1cxSA5qvLKmu2FjYR2xZI3fdSocXS_VCOXYUdk6C0YVA/edit?usp=sharing"
 COOLDOWN_HOURS = 12
 
-st.set_page_config(page_title="📸 拍拍挑戰：特工觀察", layout="centered")
+st.set_page_config(page_title="📸 導生聚：拍拍挑戰", layout="centered")
 
 # [鋼鐵初始化] 防止 AttributeError 導致全頁崩潰
 if 'init_done' not in st.session_state:
@@ -30,7 +30,7 @@ def safe_int(val):
     except: return 0
 
 def get_agent_rank(tickets, photo_count):
-    if photo_count == 0: return "🆕 待命特工"
+    if photo_count == 0: return "尚未獲得稱號"
     if tickets >= 11: return "🌌 傳奇拍拍"
     elif tickets >= 7: return "🎖️ 大師拍拍"
     elif tickets >= 4: return "🛡️ 菁英拍拍"
@@ -92,12 +92,12 @@ if df_users is not None:
         if c not in df_users.columns: df_users[c] = "0" if c != "task_cooldowns" else "{}"
 
     if not st.session_state.login:
-        st.title("🍂 公衛一甲：特工登入")
+        st.title("🍂 公衛二甲：導生聚活動")
         # 修正登入邏輯：Nickname(變更暱稱) 修正 typo
         login_labels = df_users.apply(lambda r: f"{safe_str(r['Nickname(變更暱稱)'])} ({r['name(姓名)']})" if safe_str(r['Nickname(變更暱稱)']) != "" else r['name(姓名)'], axis=1).tolist()
-        sel = st.selectbox("請選擇身份", ["搜尋代號..."] + login_labels)
-        pwd = st.text_input("密碼", type="password")
-        if st.button("進入觀測站"):
+        sel = st.selectbox("帳號（預設為本名） *可於登入後，修改暱稱", ["搜尋代號..."] + login_labels)
+        pwd = st.text_input("密碼（預設為學號） *可於登入後，自訂密碼", type="password")
+        if st.button("登入"):
             # 匹配逻辑修正
             match = df_users[(df_users['name(姓名)'] == sel) | (df_users.apply(lambda r: f"{safe_str(r['Nickname(變更暱稱)'])} ({r['name(姓名)']})", axis=1) == sel)]
             if not match.empty:
@@ -124,9 +124,9 @@ if df_users is not None:
 
         with st.sidebar:
             st.metric("抽獎券總額", f"{total_tickets} 張")
-            if st.button("🚪 登出系統"): st.session_state.login = False; st.rerun()
+            if st.button("🚪 帳號登出"): st.session_state.login = False; st.rerun()
 
-        tabs = st.tabs(["🎯 任務挑選", "📊 進度追蹤", "🏆 榮譽榜", "🎰 地下博弈", "⚙️ 設定"])
+        tabs = st.tabs(["🎯 任務挑選", "📊 進度追蹤", "🏆 排行榜", "🎰 地下博弈", "⚙️ 帳號設定"])
 
         def mark_tuto_step(col):
             st.session_state.t_done[col] = True
@@ -142,40 +142,40 @@ if df_users is not None:
         with tabs[0]:
             is_locked = not st.session_state.t_done.get('tuto_task', False)
             if is_locked:
-                st.markdown(f'<div class="tutorial-box"><h3>🚀 實戰教學：首場觀測</h3><p>特工，請拍攝一張校園風景或藝術角落的照片回傳。完成後將解鎖正式分區並計入 A 級進度 +1。</p><div class="tutorial-footer"><span class="t-badge">訓練進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
-                up_n = st.file_uploader("上傳實戰照片", type=['png','jpg','jpeg'], key="up_newbie")
-                if up_n and st.button("✨ 送出觀測並解鎖任務系統", use_container_width=True):
+                st.markdown(f'<div class="tutorial-box"><h3>🚀新手指引：操作教學</h3><p>請上傳任意一張圖片，不限主題，不可涉及違法、色情。</h3><p>完成後將解鎖A~E難度分級，完成此任務將計入 A 級難度進度 +1。</p><div class="tutorial-footer"><span class="t-badge">訓練進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
+                up_n = st.file_uploader("上傳任務照片", type=['png','jpg','jpeg'], key="up_newbie")
+                if up_n and st.button("確認送出，解鎖完整任務系統", use_container_width=True):
                     try:
                         res = cloudinary.uploader.upload(up_n, folder="CSMU_AGENT", transformation=[{'width': 800, 'quality': "auto:eco"}])
                         df_users['photo_list'] = df_users['photo_list'].astype(object); df_users['task_list'] = df_users['task_list'].astype(object); df_users['done_A'] = df_users['done_A'].astype(object)
                         cp = safe_str(user.get("photo_list")); ct = safe_str(user.get("task_list"))
                         df_users.at[u_idx, "photo_list"] = str(res["secure_url"] if cp == "" else f"{cp},{res['secure_url']}")
-                        df_users.at[u_idx, "task_list"] = str("實戰教學：校園之眼" if ct == "" else f"{ct},實戰教學：校園之眼")
+                        df_users.at[u_idx, "task_list"] = str("新手指引：操作教學" if ct == "" else f"{ct},新手指引：操作教學")
                         df_users.at[u_idx, "done_A"] = str(safe_int(user.get("done_A")) + 1)
                         mark_tuto_step('tuto_task')
                     except: st.error("上傳失敗，請重試")
             else:
-                st.write("### 📍 步驟一：選擇難度")
+                st.write("### 📍選擇任務難度")
                 lvl = st.radio("難度分級", ["A", "B", "C", "D", "E"], horizontal=True, label_visibility="collapsed")
                 filtered = df_tasks[df_tasks['difficulty'].astype(str).str.strip() == lvl]
                 for idx, task in filtered.iterrows():
                     with st.container():
                         st.markdown(f'<div class="mission-card"><b>{task["title"]}</b><br><small>{task["content"]}</small></div>', unsafe_allow_html=True)
-                        if st.button("鎖定此任務", key=f"lk_{idx}"): st.toast(f"已鎖定：{task['title']}")
+                        if st.button("選擇此任務", key=f"lk_{idx}"): st.toast(f"已鎖定：{task['title']}")
 
         # --- Tab 2: 進度 ---
         with tabs[1]:
             is_locked = not st.session_state.t_done.get('tuto_prog', False)
             if is_locked:
-                st.markdown(f'<div class="tutorial-box"><h3>📊 進度導引</h3><p>達成各階級任務數量即可獲得聚會當天的抽獎券。</p><div class="tutorial-footer"><span class="t-badge">訓練進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
-                if st.button("我已了解進度規則", key="btn_t2", use_container_width=True): mark_tuto_step('tuto_prog')
+                st.markdown(f'<div class="tutorial-box"><h3>📊 新手指引：操作教學</h3><p>任務數量依照難度而有不同，完成對應數量，可獲得導生聚當天的禮物抽獎券，可重複完成任務，領取多張抽獎券。</p><div class="tutorial-footer"><span class="t-badge">訓練進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
+                if st.button("我已閱讀完畢", key="btn_t2", use_container_width=True): mark_tuto_step('tuto_prog')
             st.subheader("📊 任務完成度統計")
             for l in ["A", "B", "C", "D", "E"]:
                 v = safe_int(user.get(f"done_{l}")); st.write(f"難度 {l}： {v} / 5"); st.progress(min(v/5, 1.0))
 
-        # --- Tab 3: 🏆 榮譽榜 (前 8 名) ---
+        # --- Tab 3: 🏆 排行榜 (前 8 名) ---
         with tabs[2]:
-            st.write("### 🏆 特工榮譽殿堂")
+            st.write("### 🏆 榮譽殿堂")
             # 門檻：必須上傳過照片
             active_u = df_users[df_users['photo_list'].apply(lambda x: safe_str(x) != "")]
             def get_nick(row):
@@ -184,12 +184,12 @@ if df_users is not None:
 
             c1, c2 = st.columns(2)
             with c1:
-                st.markdown("#### 📸 觀測王 (任務量)")
+                st.markdown("#### 📸 「任」勞「任」怨 (完成任務數量)")
                 active_u['total'] = active_u.apply(lambda r: sum(safe_int(r.get(f'done_{l}')) for l in "ABCDE"), axis=1)
                 for i, (_, r) in enumerate(active_u.sort_values(by='total', ascending=False).head(8).iterrows()):
                     st.markdown(f'<div class="leaderboard-card"><span class="rank-num">{i+1}</span><span>{get_nick(r)}</span><span>{int(r["total"])} 次</span></div>', unsafe_allow_html=True)
             with c2:
-                st.markdown("#### 🎰 賭神榜 (盈虧)")
+                st.markdown("#### 🎰 Let me 賭 it for you (透過博弈獲取最高抽獎券數量)")
                 for i, (_, r) in enumerate(active_u.sort_values(by='gamble_profit', ascending=False).head(8).iterrows()):
                     st.markdown(f'<div class="leaderboard-card"><span class="rank-num">{i+1}</span><span>{get_nick(r)}</span><span>{int(r["gamble_profit"])} 張</span></div>', unsafe_allow_html=True)
 
@@ -197,10 +197,10 @@ if df_users is not None:
         with tabs[3]:
             is_locked = not st.session_state.t_done.get('tuto_gamble', False)
             if is_locked:
-                st.markdown(f'<div class="tutorial-box"><h3>🎰 博弈導引</h3><p>消耗獎券參與，勝率 75%。累積 4 次血本無歸有保底！</p><div class="tutorial-footer"><span class="t-badge">訓練進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
-                if st.button("我已了解博弈規則", key="btn_t4", use_container_width=True): mark_tuto_step('tuto_gamble')
-            st.markdown('<div class="casino-zone"><h2>🎰 特工地下城</h2><p>這裡是命運的分叉路。勝率 75%</p></div>', unsafe_allow_html=True)
-            if total_tickets < 1: st.error("❌ 餘額不足")
+                st.markdown(f'<div class="tutorial-box"><h3>🎰 新手指引：操作教學</h3><p>透過完成任務所獲得抽獎券，可於此進行博弈，每次博次消耗一張，最高可獲得4張，最低擇一無所獲</h3><p>當累積 4 次血本無歸時，將贈送兩張抽獎券！</p><div class="tutorial-footer"><span class="t-badge">訓練進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
+                if st.button("我已閱讀完畢", key="btn_t4", use_container_width=True): mark_tuto_step('tuto_gamble')
+            st.markdown('<div class="casino-zone"><h2>🎰 特工地下城</h2><p>這裡是命運的分叉路，無所不有或是一無所有。</p></div>', unsafe_allow_html=True)
+            if total_tickets < 1: st.error("❌ 目前尚未有一張抽獎券")
             else:
                 if st.button("🧧 消耗 1 張下注！", use_container_width=True):
                     roll = random.random() * 100
@@ -214,7 +214,7 @@ if df_users is not None:
                     for col in ['gamble_balance', 'loss_count', 'gamble_count', 'gamble_profit']: df_users[col] = df_users[col].astype(object)
                     cl = safe_int(user.get('loss_count')); nl = cl + 1 if r_s == "loss" else cl
                     bonus = 0; 
-                    if nl >= 4: bonus = 2; nl = 0; st.toast("🛡️ 保底補貼入帳！")
+                    if nl >= 4: bonus = 2; nl = 0; st.toast("🛡️ 運氣差不要緊，給你額外兩張抽獎券！")
                     
                     df_users.at[u_idx, "gamble_balance"] = str(safe_int(user.get('gamble_balance')) + gain + bonus)
                     df_users.at[u_idx, "loss_count"] = str(nl)
@@ -233,16 +233,16 @@ if df_users is not None:
         with tabs[4]:
             is_locked = not st.session_state.t_done.get('tuto_set', False)
             if is_locked:
-                st.markdown(f'<div class="tutorial-box"><h3>⚙️ 設定導引</h3><p>在此修改代號以匿蹤，或自訂登入密碼。</p><div class="tutorial-footer"><span class="t-badge">訓練進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
-                if st.button("我已了解設定功能", key="btn_t3", use_container_width=True): mark_tuto_step('tuto_set')
+                st.markdown(f'<div class="tutorial-box"><h3>⚙️ 新手指引：操作教學</h3><p>可在此修改帳號名稱，後續他人僅可見你的暱稱，也可以在此自訂登入密碼學</h3><p>後續若忘記帳號或者密碼，可聯繫班代潘芯渝，我會幫你恢復預設密碼嘻嘻。</p><div class="tutorial-footer"><span class="t-badge">訓練進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
+                if st.button("我已閱讀完畢", key="btn_t3", use_container_width=True): mark_tuto_step('tuto_set')
             st.subheader("⚙️ 帳號設定")
-            nn = st.text_input("修改特工代號", value=safe_str(user.get("Nickname(變更暱稱)")))
+            nn = st.text_input("變更暱稱", value=safe_str(user.get("Nickname(變更暱稱)")))
             np = st.text_input("自訂密碼", type="password", placeholder="留空不修改")
             if st.button("💾 更新資料"):
                 df_users['Nickname(變更暱稱)'] = df_users['Nickname(變更暱稱)'].astype(object); df_users['password(自訂密碼)'] = df_users['password(自訂密碼)'].astype(object)
                 df_users.at[u_idx, "Nickname(變更暱稱)"] = str(nn)
                 if np.strip() != "": df_users.at[u_idx, "password(自訂密碼)"] = str(np)
-                conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users); st.success("更新成功")
+                conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users); st.success("修改成功")
 
         # --- 結業大看板 ---
         if done_count == 4 and safe_str(user.get('gift_given')) == "1":
