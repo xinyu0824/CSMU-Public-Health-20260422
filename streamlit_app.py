@@ -95,7 +95,7 @@ if df_users is not None:
         st.title("🍂 公衛二甲：導生聚活動")
         # 修正登入邏輯：Nickname(變更暱稱) 修正 typo
         login_labels = df_users.apply(lambda r: f"{safe_str(r['Nickname(變更暱稱)'])} ({r['name(姓名)']})" if safe_str(r['Nickname(變更暱稱)']) != "" else r['name(姓名)'], axis=1).tolist()
-        sel = st.selectbox("帳號（預設為本名） *可於登入後，修改暱稱", ["搜尋代號..."] + login_labels)
+        sel = st.selectbox("帳號（預設為本名） *可於登入後，修改暱稱", ["搜尋姓名..."] + login_labels)
         pwd = st.text_input("密碼（預設為學號） *可於登入後，自訂密碼", type="password")
         if st.button("登入"):
             # 匹配逻辑修正
@@ -142,7 +142,7 @@ if df_users is not None:
         with tabs[0]:
             is_locked = not st.session_state.t_done.get('tuto_task', False)
             if is_locked:
-                st.markdown(f'<div class="tutorial-box"><h3>🚀新手指引：操作教學</h3><p>請上傳任意一張圖片，不限主題，不可涉及違法、色情。</h3><p>完成後將解鎖A~E難度分級，完成此任務將計入 A 級難度進度 +1。</p><div class="tutorial-footer"><span class="t-badge">訓練進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="tutorial-box"><h3>🚀新手指引：操作教學</h3><p>請上傳任意一張圖片，不限主題，不可涉及違法、色情。</h3><p>完成後將解鎖A~E難度分級，完成此任務將計入 A 級難度進度 +1。</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
                 up_n = st.file_uploader("上傳任務照片", type=['png','jpg','jpeg'], key="up_newbie")
                 if up_n and st.button("確認送出，解鎖完整任務系統", use_container_width=True):
                     try:
@@ -167,7 +167,7 @@ if df_users is not None:
         with tabs[1]:
             is_locked = not st.session_state.t_done.get('tuto_prog', False)
             if is_locked:
-                st.markdown(f'<div class="tutorial-box"><h3>📊 新手指引：操作教學</h3><p>任務數量依照難度而有不同，完成對應數量，可獲得導生聚當天的禮物抽獎券，可重複完成任務，領取多張抽獎券。</p><div class="tutorial-footer"><span class="t-badge">訓練進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="tutorial-box"><h3>📊 新手指引：操作教學</h3><p>任務數量依照難度而有不同，完成對應數量，可獲得導生聚當天的禮物抽獎券，可重複完成任務，領取多張抽獎券。</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
                 if st.button("我已閱讀完畢", key="btn_t2", use_container_width=True): mark_tuto_step('tuto_prog')
             st.subheader("📊 任務完成度統計")
             for l in ["A", "B", "C", "D", "E"]:
@@ -197,12 +197,12 @@ if df_users is not None:
         with tabs[3]:
             is_locked = not st.session_state.t_done.get('tuto_gamble', False)
             if is_locked:
-                st.markdown(f'<div class="tutorial-box"><h3>🎰 新手指引：操作教學</h3><p>透過完成任務所獲得抽獎券，可於此進行博弈，每次博次消耗一張，最高可獲得4張，最低擇一無所獲</h3><p>當累積 4 次血本無歸時，將贈送兩張抽獎券！</p><div class="tutorial-footer"><span class="t-badge">訓練進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="tutorial-box"><h3>🎰 新手指引：操作教學</h3><p>透過完成任務所獲得抽獎券，可於此進行博弈，每次博次消耗一張，最高可獲得4張，最低擇一無所獲</h3><p>當累積 4 次血本無歸時，將贈送兩張抽獎券！</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
                 if st.button("我已閱讀完畢", key="btn_t4", use_container_width=True): mark_tuto_step('tuto_gamble')
             st.markdown('<div class="casino-zone"><h2>🎰 特工地下城</h2><p>這裡是命運的分叉路，無所不有或是一無所有。</p></div>', unsafe_allow_html=True)
             if total_tickets < 1: st.error("❌ 目前尚未有一張抽獎券")
             else:
-                if st.button("🧧 消耗 1 張下注！", use_container_width=True):
+                if st.button("🧧 消耗 1 張抽獎券！", use_container_width=True):
                     roll = random.random() * 100
                     gain = -1 
                     if roll < 10: gain += 4; r_t, r_m, r_s = "💎 奇蹟！", "獲得 4 張！", "win"
@@ -233,7 +233,7 @@ if df_users is not None:
         with tabs[4]:
             is_locked = not st.session_state.t_done.get('tuto_set', False)
             if is_locked:
-                st.markdown(f'<div class="tutorial-box"><h3>⚙️ 新手指引：操作教學</h3><p>可在此修改帳號名稱，後續他人僅可見你的暱稱，也可以在此自訂登入密碼學</h3><p>後續若忘記帳號或者密碼，可聯繫班代潘芯渝，我會幫你恢復預設密碼嘻嘻。</p><div class="tutorial-footer"><span class="t-badge">訓練進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="tutorial-box"><h3>⚙️ 新手指引：操作教學</h3><p>可在此修改帳號名稱，後續他人僅可見你的暱稱，也可以在此自訂登入密碼學</h3><p>後續若忘記帳號或者密碼，可聯繫班代潘芯渝，我會幫你恢復預設密碼嘻嘻。</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
                 if st.button("我已閱讀完畢", key="btn_t3", use_container_width=True): mark_tuto_step('tuto_set')
             st.subheader("⚙️ 帳號設定")
             nn = st.text_input("變更暱稱", value=safe_str(user.get("Nickname(變更暱稱)")))
