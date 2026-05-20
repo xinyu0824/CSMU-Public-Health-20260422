@@ -31,7 +31,7 @@ def safe_int(val):
         return int(float(s)) if s != "" else 0
     except: return 0
 
-# 校準稱號門檻 (依據實體總券數精準發放)
+# 校準稱號門檻
 def get_agent_rank(tickets, photo_count):
     if photo_count == 0: return "🆕 待命特工"
     if tickets >= 11: return "🌌 傳奇拍拍"
@@ -106,7 +106,7 @@ if df_users is not None:
         u_match = df_users[df_users["Student ID(預設密碼)"].astype(str).str.contains(st.session_state.student_id)]
         user = u_match.iloc[0]; u_idx = u_match.index[0]
 
-        # 🟢 [強效記憶鎖定] 讀取並同步雲端數據到臨時記憶中
+        # 讀取並同步雲端數據到臨時記憶中
         for col in ['tuto_task', 'tuto_prog', 'tuto_gamble', 'tuto_set']:
             if safe_str(user.get(col)) == "1":
                 st.session_state.t_done[col] = True
@@ -131,14 +131,19 @@ if df_users is not None:
 
         tabs = st.tabs(["🎯 任務挑選", "📊 進度追蹤", "🏆 排行榜", "🎰 地下博弈", "⚙️ 帳號設定"])
 
-        # 🟢 [記憶修復] 核心修正：確保資料寫入成純字串 "1"，並強制重新整理
+        # 🟢 [終極修復] 強制轉換欄位型態為文字，防止 TypeError 崩潰
         def mark_tuto_step(col):
             st.session_state.t_done[col] = True
+            
+            # 先將該欄位全部強制轉換為文字型態物件
+            df_users[col] = df_users[col].astype(str)
             df_users.at[u_idx, col] = "1"
             
             # 檢查是否集滿 4 個
             current_done_list = [safe_str(df_users.at[u_idx, c]) == "1" or c == col for c in ['tuto_task', 'tuto_prog', 'tuto_gamble', 'tuto_set']]
             if all(current_done_list) and safe_str(user.get('gift_given')) != "1":
+                df_users['gift_given'] = df_users['gift_given'].astype(str)
+                df_users['extra_tickets'] = df_users['extra_tickets'].astype(str)
                 df_users.at[u_idx, 'gift_given'] = "1"
                 df_users.at[u_idx, 'extra_tickets'] = str(safe_int(user.get('extra_tickets')) + 1)
                 
@@ -162,7 +167,7 @@ if df_users is not None:
                 st.session_state.p_shown = True; st.rerun()
             st.stop()
 
-        # --- Tab 1: 任務挑選（每日飢餓行銷：限額 4 題） ---
+        # --- Tab 1: 任務挑選 ---
         with tabs[0]:
             is_locked = not st.session_state.t_done.get('tuto_task', False)
             if is_locked:
@@ -171,7 +176,13 @@ if df_users is not None:
                 if up_n and st.button("確認送出，解鎖完整任務系統", use_container_width=True):
                     try:
                         res = cloudinary.uploader.upload(up_n, folder="CSMU_AGENT", transformation=[{'width': 800, 'quality': "auto:eco"}])
-                        df_users.at[u_idx, "photo_list"] = str(res["secure_url"] if safe_str(user.get("photo_list")) == "" else f"{safe_str(user.get('photo_list'))},{res['secure_url']}")
+                        
+                        df_users['photo_list'] = df_users['photo_list'].astype(str)
+                        df_users['task_list'] = df_users['task_list'].astype(str)
+                        df_users['done_初階'] = df_users['done_初階'].astype(str)
+                        
+                        cp = safe_str(user.get("photo_list")); ct = safe_str(user.get("task_list"))
+                        df_users.at[u_idx, "photo_list"] = str(res["secure_url"] if cp == "" else f"{cp},{res['secure_url']}")
                         df_users.at[u_idx, "task_list"] = str("新手指引：操作教學" if safe_str(user.get("task_list")) == "" else f"{safe_str(user.get('task_list'))},新手指引：操作教學")
                         df_users.at[u_idx, "done_初階"] = str(safe_int(user.get("done_初階")) + 1)
                         mark_tuto_step('tuto_task')
@@ -183,17 +194,16 @@ if df_users is not None:
                 lvl_map = {"初階": "A", "中階": "B", "高階": "C", "傳奇": "D"}
                 filtered = df_tasks[df_tasks['difficulty'].astype(str).str.strip() == lvl_map.get(lvl, "A")].copy()
                 
-                # 🟢 [屏蔽新手任務] 只要看過教學，這題打死不顯示在清單裡！
+                # 屏蔽新手任務
                 filtered = filtered[filtered['title'] != "新手指引：操作教學"]
                 
-                # 🟢 [核心新增] 每日隨機限額 4 題演算法（以日期作為隨機種子，全班當天看到的題目完全一樣）
+                # 每日隨機限額 4 題演算法
                 current_today_str = str(date.today())
                 if st.session_state.daily_date != current_today_str or st.session_state.daily_seed is None:
                     st.session_state.daily_date = current_today_str
                     st.session_state.daily_seed = int(datetime.now().strftime("%Y%m%d"))
                 
                 if len(filtered) > 4:
-                    # 使用固定種子，確保全班當天同步
                     rng = random.Random(st.session_state.daily_seed + ord(lvl[0]))
                     display_tasks = filtered.sample(n=4, random_state=rng.randint(0, 10000))
                 else:
@@ -237,7 +247,7 @@ if df_users is not None:
                 for i, (_, r) in enumerate(active_u.sort_values(by='gamble_profit', ascending=False).head(8).iterrows()):
                     st.markdown(f'<div class="leaderboard-card"><span class="rank-num">{i+1}</span><span>{get_nick(r)}</span><span>{int(r["gamble_profit"])} 張</span></div>', unsafe_allow_html=True)
 
-        # --- Tab 4: 地下城（無限滾動籌碼版） ---
+        # --- Tab 4: 地下城 ---
         with tabs[3]:
             is_locked = not st.session_state.t_done.get('tuto_gamble', False)
             if is_locked:
@@ -254,8 +264,13 @@ if df_users is not None:
                     if roll < 10: gain += 4; r_t, r_m, r_s = "💎 奇蹟！", "獲得 4 張！", "win"
                     elif roll < 35: gain += 3; r_t, r_m, r_s = "🔥 大勝！", "獲得 3 張！", "win"
                     elif roll < 75: gain += 2; r_t, r_m, r_s = "✨ 小贏！", "獲得 2 張！", "win"
-                    elif roll < 85: gain += 1; r_t, r_m, r_s = "⚖️ 持平", "本本金退回。", "draw"
+                    elif roll < 85: gain += 1; r_t, r_m, r_s = "⚖️ 持平", "本金退回。", "draw"
                     else: gain += 0; r_t, r_m, r_s = "💀 慘賠...", "獎券化為烏有。", "loss"
+                    
+                    df_users['gamble_balance'] = df_users['gamble_balance'].astype(str)
+                    df_users['loss_count'] = df_users['loss_count'].astype(str)
+                    df_users['gamble_count'] = df_users['gamble_count'].astype(str)
+                    df_users['gamble_profit'] = df_users['gamble_profit'].astype(str)
                     
                     cl = safe_int(user.get('loss_count'))
                     nl = cl + 1 if r_s == "loss" else cl
@@ -289,6 +304,8 @@ if df_users is not None:
             nn = st.text_input("變更暱稱", value=safe_str(user.get("Nickname(變更暱稱)")))
             np = st.text_input("自訂密碼", type="password", placeholder="留空不修改")
             if st.button("💾 更新資料"):
+                df_users['Nickname(變更暱稱)'] = df_users['Nickname(變更暱稱)'].astype(str)
+                df_users['password(自訂密碼)'] = df_users['password(自訂密碼)'].astype(str)
                 df_users.at[u_idx, "Nickname(變更暱稱)"] = str(nn)
                 if np.strip() != "": df_users.at[u_idx, "password(自訂密碼)"] = str(np)
                 conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users); st.success("修改成功")
