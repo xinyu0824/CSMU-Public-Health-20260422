@@ -106,28 +106,19 @@ if df_users is not None:
         u_match = df_users[df_users["Student ID(預設密碼)"].astype(str).str.contains(st.session_state.student_id)]
         user = u_match.iloc[0]; u_idx = u_match.index[0]
 
-        # 🟢 [最高防禦] 4 條絕對指令：精準判讀雲端與本地數值，0 (或空值) 顯示，1 隱藏
-        # 1. 任務挑選指引
-        show_tuto_task = False if (safe_str(user.get('tuto_task')) == "1" or st.session_state.t_done.get('tuto_task', False)) else True
+        #🟢 修正後的整數防禦版（全面相容 1, 1.0, "1"）：
+        show_tuto_task = False if (safe_int(user.get('tuto_task')) == 1 or st.session_state.t_done.get('tuto_task', False)) else True
         st.session_state.t_done['tuto_task'] = not show_tuto_task
 
-        # 2. 進度追蹤指引
-        show_tuto_prog = False if (safe_str(user.get('tuto_prog')) == "1" or st.session_state.t_done.get('tuto_prog', False)) else True
+        show_tuto_prog = False if (safe_int(user.get('tuto_prog')) == 1 or st.session_state.t_done.get('tuto_prog', False)) else True
         st.session_state.t_done['tuto_prog'] = not show_tuto_prog
 
-        # 3. 地下博弈指引
-        show_tuto_gamble = False if (safe_str(user.get('tuto_gamble')) == "1" or st.session_state.t_done.get('tuto_gamble', False)) else True
+        show_tuto_gamble = False if (safe_int(user.get('tuto_gamble')) == 1 or st.session_state.t_done.get('tuto_gamble', False)) else True
         st.session_state.t_done['tuto_gamble'] = not show_tuto_gamble
 
-        # 4. 帳號設定指引
-        show_tuto_set = False if (safe_str(user.get('tuto_set')) == "1" or st.session_state.t_done.get('tuto_set', False)) else True
+        show_tuto_set = False if (safe_int(user.get('tuto_set')) == 1 or st.session_state.t_done.get('tuto_set', False)) else True
         st.session_state.t_done['tuto_set'] = not show_tuto_set
-
-        # 強效盲讀重算機制
-        m_base = (safe_int(user.get('done_初階')) // 4) + \
-                 (safe_int(user.get('done_中階')) // 3) + \
-                 (safe_int(user.get('done_高階')) // 2) + \
-                 (safe_int(user.get('done_傳奇')) * 1)
+        
                  
         total_tickets = max(0, m_base + safe_int(user.get('gamble_balance')) + safe_int(user.get('extra_tickets')))
         p_str = safe_str(user.get("photo_list"))
