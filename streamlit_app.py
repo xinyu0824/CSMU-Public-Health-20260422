@@ -45,7 +45,7 @@ st.markdown("""
     .t-badge { background-color: #28a745; color: white !important; padding: 4px 14px; border-radius: 12px; font-size: 0.9rem; font-weight: bold; box-shadow: 1px 1px 4px rgba(0,0,0,0.1); }
     .tutorial-box { background-color: #FFFFFF; padding: 22px; border-radius: 15px; border-left: 6px solid #FFC107; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 25px; }
     .tutorial-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; }
-    .mission-card { background-color: #FFFFFF; padding: 18px; border: 1px solid #E6E6E1; border-radius: 6px; margin-bottom: 12px; border-left: 6px solid #FFC107; }
+    .mission-card { background-color: #FFFFFF; padding: 18px; border: 1px solid #E6E6E1; border-radius: 6px; margin-bottom: 5px; border-left: 6px solid #FFC107; }
     .leaderboard-card { background-color: #FFFFFF; padding: 15px; border-radius: 12px; border: 1px solid #E6E6E1; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
     .rank-num { font-weight: bold; font-size: 1.2rem; color: #FFC107; width: 35px; }
     .casino-zone { background: linear-gradient(135deg, #1a1a1a 0%, #3d3d3d 100%); color: #FFC107 !important; padding: 30px; border-radius: 20px; border: 3px solid #FFC107; text-align: center; margin-bottom: 25px; }
@@ -53,6 +53,8 @@ st.markdown("""
     div[role="radiogroup"] { display: flex !important; justify-content: center !important; gap: 12px !important; }
     div[role="radiogroup"] > label { flex: 1 !important; min-width: 65px !important; background-color: #FFFFFF !important; border: 1px solid #D9D9D9 !important; border-radius: 10px; padding: 15px 0 !important; cursor: pointer; display: flex !important; justify-content: center !important; }
     div[role="radiogroup"] label div[data-baseweb="radio"] > div:first-child { display: none !important; }
+    /* 微調 Expander 樣式使其貼合卡片 */
+    [data-testid="stExpander"] { border: 1px solid #E6E6E1; border-top: none; border-radius: 0 0 6px 6px; margin-bottom: 15px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -123,7 +125,6 @@ if df_users is not None:
 
         display_title_name = safe_str(user.get("Nickname(變更暱稱)")) if safe_str(user.get("Nickname(變更暱稱)")) != "" else user["name(姓名)"]
         
-        # 🟢 [關鍵修復點] 補上了這一行最尾端漏掉的右括號 )
         st.markdown(f'<div class="title-wrapper"><span class="agent-badge">{get_agent_rank(total_tickets, len(p_list))}</span><span class="main-title">{display_title_name} 的觀測終端</span></div>', unsafe_allow_html=True)
 
         with st.sidebar:
@@ -208,10 +209,37 @@ if df_users is not None:
                     display_tasks = filtered
                 
                 st.caption(f"📅 今日「{lvl}」任務清單已刷新，限額展示 {len(display_tasks)} 題")
+                
+                # 🟢 [核心擴充] 將正式任務加上「上傳摺疊面板」，讓同學真正能執行任務！
                 for idx, task in display_tasks.iterrows():
                     with st.container():
                         st.markdown(f'<div class="mission-card"><b>{task["title"]}</b><br><small>{task["content"]}</small></div>', unsafe_allow_html=True)
-                        if st.button("選擇此任務", key=f"lk_{idx}"): st.toast(f"已選擇：{task['title']}")
+                        with st.expander("📸 執行此任務 (上傳情報)"):
+                            up_task = st.file_uploader("選擇照片", type=['png','jpg','jpeg'], key=f"up_task_{idx}")
+                            if up_task and st.button("確認達成任務", key=f"btn_task_{idx}", use_container_width=True):
+                                try:
+                                    res = cloudinary.uploader.upload(up_task, folder="CSMU_AGENT", transformation=[{'width': 800, 'quality': "auto:eco"}])
+                                    
+                                    # 強制轉型確保留存
+                                    df_users['photo_list'] = df_users['photo_list'].astype(str)
+                                    df_users['task_list'] = df_users['task_list'].astype(str)
+                                    target_done_col = f"done_{lvl}"
+                                    df_users[target_done_col] = df_users[target_done_col].astype(str)
+                                    
+                                    cp = safe_str(user.get("photo_list"))
+                                    ct = safe_str(user.get("task_list"))
+                                    
+                                    # 寫入資料
+                                    df_users.at[u_idx, "photo_list"] = str(res["secure_url"] if cp == "" else f"{cp},{res['secure_url']}")
+                                    df_users.at[u_idx, "task_list"] = str(task["title"] if ct == "" else f"{ct},{task['title']}")
+                                    df_users.at[u_idx, target_done_col] = str(safe_int(user.get(target_done_col)) + 1)
+                                    
+                                    conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users)
+                                    st.cache_data.clear()
+                                    st.success(f"✅ 【{task['title']}】情報已成功回傳總部！進度 +1")
+                                    st.rerun()
+                                except Exception as e: 
+                                    st.error("上傳失敗，請檢查網路狀態或稍微縮小圖片尺寸再試一次。")
 
         # --- Tab 2: 進度 ---
         with tabs[1]:
