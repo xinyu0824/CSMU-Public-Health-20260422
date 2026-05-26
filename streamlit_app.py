@@ -31,7 +31,7 @@ def safe_int(val):
     except: return 0
 
 def get_agent_rank(tickets, photo_count):
-    if photo_count == 0: return "🆕 待命特工"
+    if photo_count == 0: return "🆕尚未獲得稱號"
     if tickets >= 11: return "🌌 傳奇拍拍"
     elif tickets >= 7: return "🎖️ 大師拍拍"
     elif tickets >= 4: return "🛡️ 菁英拍拍"
@@ -77,14 +77,14 @@ if df_users is not None:
         if c not in df_users.columns: df_users[c] = ""
 
     if not st.session_state.login:
-        st.title("🍂 公衛二甲：導生聚活動")
+        st.title("公衛二甲：導生聚活動")
         
         def get_clean_login_label(row):
             nick = safe_str(row.get("Nickname(變更暱稱)", ""))
             return nick if nick != "" else str(row['name(姓名)'])
             
         login_labels = df_users.apply(get_clean_login_label, axis=1).dropna().tolist()
-        sel = st.selectbox("帳號選擇（若已變更暱稱，請尋找你的暱稱代號）", ["請選擇身份..."] + login_labels)
+        sel = st.selectbox("帳號選擇（預設為姓名，可於登入後變更暱稱）", ["你是誰..."] + login_labels)
         pwd = st.text_input("密碼（預設為學號）", type="password")
         
         if st.button("登入"):
@@ -153,13 +153,13 @@ if df_users is not None:
             st.markdown("""
                 <div style="background-color:#FFF9E6; padding:35px; border-radius:20px; text-align:center; border:4px solid #FFC107; box-shadow: 0 10px 30px rgba(0,0,0,0.1); margin-bottom: 25px;">
                     <h1 style="color:#FFC107; margin:0; font-size: 2.2rem;">🎊 新手特訓合格 🎊</h1>
-                    <p style="font-size:1.2rem; margin-top:12px; color: #5F5F5F;">你已完成 4 項功能指引，第一桶金已發放！</p>
+                    <p style="font-size:1.2rem; margin-top:12px; color: #5F5F5F;">你已完成 4 項功能指引，已發放一張抽獎券！</p>
                     <div style="background:#FFC107; color:white; display:inline-block; padding:8px 25px; border-radius:10px; font-size: 1.4rem; font-weight: bold; margin: 15px 0;">
-                        🎁 結業獎勵：抽獎券 +1 張
+                        🎁 完成新手指引：抽獎券 +1 張
                     </div>
                 </div>
             """, unsafe_allow_html=True)
-            if st.button("進入戰場（點擊解鎖全部功能）", use_container_width=True):
+            if st.button("進入（點擊解鎖全部功能）", use_container_width=True):
                 st.session_state.p_shown = True; st.rerun()
             st.stop()
 
@@ -167,9 +167,9 @@ if df_users is not None:
         with tabs[0]:
             is_locked = not st.session_state.t_done.get('tuto_task', False)
             if is_locked:
-                st.markdown(f'<div class="tutorial-box"><h3>🚀新手指引：操作教學</h3><p>請上傳任意一張圖片測試功能。完成後將解鎖四大級別任務，此任務將計入「初階」進度 +1。</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="tutorial-box"><h3>🚀新手指引：操作教學</h3><p>請上傳任意一張圖片測試功能。完成後將解鎖四種難度等級任務，此任務將計入「初階」進度 +1。</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
                 up_n = st.file_uploader("上傳任務照片", type=['png','jpg','jpeg'], key="up_newbie")
-                if up_n and st.button("確認送出，解鎖完整任務系統", use_container_width=True):
+                if up_n and st.button("確認送出，解鎖四種難度等級", use_container_width=True):
                     try:
                         res = cloudinary.uploader.upload(up_n, folder="CSMU_AGENT", transformation=[{'width': 800, 'quality': "auto:eco"}])
                         df_users['photo_list'] = df_users['photo_list'].astype(str)
@@ -207,19 +207,19 @@ if df_users is not None:
                 else:
                     display_tasks = filtered
                 
-                st.caption(f"📅 今日「{lvl}」情報池已刷新，限額展示 {len(display_tasks)} 題")
+                st.caption(f"📅 今日「{lvl}」任務清單已刷新，限額展示 {len(display_tasks)} 題")
                 for idx, task in display_tasks.iterrows():
                     with st.container():
                         st.markdown(f'<div class="mission-card"><b>{task["title"]}</b><br><small>{task["content"]}</small></div>', unsafe_allow_html=True)
-                        if st.button("選擇此任務", key=f"lk_{idx}"): st.toast(f"已鎖定：{task['title']}")
+                        if st.button("選擇此任務", key=f"lk_{idx}"): st.toast(f"已選擇：{task['title']}")
 
         # --- Tab 2: 進度 ---
         with tabs[1]:
             is_locked = not st.session_state.t_done.get('tuto_prog', False)
             if is_locked:
-                st.markdown(f'<div class="tutorial-box"><h3>📊 新手指引：操作教學</h3><p>任務數量依照難度而有不同，完成對應數量可獲得抽獎券。</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="tutorial-box"><h3>📊 新手指引：操作教學</h3><p>任務數量依照難度而有不同，完成對應數量可獲得抽獎券一張，不限完成次數，可無限次累積完成任務！。</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
                 if st.button("我已閱讀完畢", key="btn_t2", use_container_width=True): mark_tuto_step('tuto_prog')
-            st.subheader("📊 任務完成度統計")
+            st.subheader("📊 任務進度")
             bars = [("初階", 4), ("中階", 3), ("高階", 2), ("傳奇", 1)]
             for title, limit in bars:
                 v = safe_int(user.get(f"done_{title}"))
@@ -228,20 +228,20 @@ if df_users is not None:
 
         # --- Tab 3: 🏆 排行榜 ---
         with tabs[2]:
-            st.write("### 🏆 榮譽殿堂")
+            st.write("### 🏆 排行榜")
             active_u = df_users[df_users['photo_list'].apply(lambda x: safe_str(x) != "")]
             def get_nick(row):
                 n = safe_str(row.get("Nickname(變更暱稱)", ""))
-                return n if n != "" else f"{str(row['name(姓名)'])[0]}* 特工"
+                return n if n != "" else f"{str(row['name(姓名)'])[0]}* 同學"
 
             c1, c2 = st.columns(2)
             with c1:
-                st.markdown("#### 📸 「任」勞「任」怨 (完成任務數量)")
+                st.markdown("#### 📸任勞任怨 (完成任務數量)")
                 active_u['total'] = active_u.apply(lambda r: sum(safe_int(r.get(f'done_{l}')) for l in ["初階", "中階", "高階", "傳奇"]), axis=1)
                 for i, (_, r) in enumerate(active_u.sort_values(by='total', ascending=False).head(8).iterrows()):
                     st.markdown(f'<div class="leaderboard-card"><span class="rank-num">{i+1}</span><span>{get_nick(r)}</span><span>{int(r["total"])} 次</span></div>', unsafe_allow_html=True)
             with c2:
-                st.markdown("#### 🎰 Let me 賭 it for you (博弈最高利潤)")
+                st.markdown("#### 🎰 Let me 賭 it for you (博弈獲得數量)")
                 for i, (_, r) in enumerate(active_u.sort_values(by='gamble_profit', ascending=False).head(8).iterrows()):
                     st.markdown(f'<div class="leaderboard-card"><span class="rank-num">{i+1}</span><span>{get_nick(r)}</span><span>{int(r["gamble_profit"])} 張</span></div>', unsafe_allow_html=True)
 
@@ -251,7 +251,7 @@ if df_users is not None:
             if is_locked:
                 st.markdown(f'<div class="tutorial-box"><h3>🎰 新手指引：操作教學</h3><p>每次博弈消耗一張，最高可獲得4張，最低則一無所獲。累積 4 次失敗有保底！</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
                 if st.button("我已閱讀完畢", key="btn_t4", use_container_width=True): mark_tuto_step('tuto_gamble')
-            st.markdown('<div class="casino-zone"><h2>🎰 特工地下城</h2><p>命運的分叉路，翻倍或一無所有。</p></div>', unsafe_allow_html=True)
+            st.markdown('<div class="casino-zone"><h2>🎰 賭賭賭</h2><p>命運的分叉路，翻倍或一無所有。</p></div>', unsafe_allow_html=True)
             
             if total_tickets < 1: 
                 st.error("❌ 目前你手上沒有多餘的抽獎券可以下注。快去解任務賺籌碼！")
@@ -262,7 +262,7 @@ if df_users is not None:
                     if roll < 10: gain += 4; r_t, r_m, r_s = "💎 奇蹟！", "獲得 4 張！", "win"
                     elif roll < 35: gain += 3; r_t, r_m, r_s = "🔥 大勝！", "獲得 3 張！", "win"
                     elif roll < 75: gain += 2; r_t, r_m, r_s = "✨ 小贏！", "獲得 2 張！", "win"
-                    elif roll < 85: gain += 1; r_t, r_m, r_s = "⚖️ 持平", "本金退回。", "draw"
+                    elif roll < 85: gain += 1; r_t, r_m, r_s = "⚖️ 不賺不賠", "獲得 1 張。", "draw"
                     else: gain += 0; r_t, r_m, r_s = "💀 慘賠...", "獎券化為烏有。", "loss"
                     
                     df_users['gamble_balance'] = df_users['gamble_balance'].astype(str)
