@@ -105,12 +105,19 @@ if df_users is not None:
         u_match = df_users[df_users["Student ID(預設密碼)"].astype(str).str.contains(st.session_state.student_id)]
         user = u_match.iloc[0]; u_idx = u_match.index[0]
 
-        # 獨立記憶讀取
-        for col in ['tuto_task', 'tuto_prog', 'tuto_gamble', 'tuto_set']:
-            if safe_str(user.get(col)) == "1":
-                st.session_state.t_done[col] = True
-            else:
-                st.session_state.t_done[col] = False
+        # 🟢 [最高防禦] 4 條絕對指令：雙軌防線（本地記憶優先，雲端為輔）
+        # 只要本地或雲端其中一個是完成狀態，show_tuto 就為 False (隱藏)
+        show_tuto_task = not (st.session_state.t_done.get('tuto_task', False) or safe_str(user.get('tuto_task')) == "1")
+        st.session_state.t_done['tuto_task'] = not show_tuto_task
+
+        show_tuto_prog = not (st.session_state.t_done.get('tuto_prog', False) or safe_str(user.get('tuto_prog')) == "1")
+        st.session_state.t_done['tuto_prog'] = not show_tuto_prog
+
+        show_tuto_gamble = not (st.session_state.t_done.get('tuto_gamble', False) or safe_str(user.get('tuto_gamble')) == "1")
+        st.session_state.t_done['tuto_gamble'] = not show_tuto_gamble
+
+        show_tuto_set = not (st.session_state.t_done.get('tuto_set', False) or safe_str(user.get('tuto_set')) == "1")
+        st.session_state.t_done['tuto_set'] = not show_tuto_set
 
         # 強效盲讀重算機制
         m_base = (safe_int(user.get('done_初階')) // 4) + \
@@ -166,8 +173,7 @@ if df_users is not None:
 
         # --- Tab 1: 任務挑選 ---
         with tabs[0]:
-            is_locked = not st.session_state.t_done.get('tuto_task', False)
-            if is_locked:
+            if show_tuto_task:  # 🟢 替換為絕對指令
                 st.markdown(f'<div class="tutorial-box"><h3>🚀新手指引：操作教學</h3><p>請上傳任意一張圖片測試功能。完成後將解鎖四種難度等級任務，此任務將計入「初階」進度 +1。</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
                 up_n = st.file_uploader("上傳任務照片", type=['png','jpg','jpeg'], key="up_newbie")
                 if up_n and st.button("確認送出，解鎖四種難度等級", use_container_width=True):
@@ -194,8 +200,10 @@ if df_users is not None:
                     (df_tasks['difficulty'].astype(str).str.strip() == lvl)
                 ].copy()
                 
-                filtered = filtered[filtered['title'] != "新手指引：操作教學"]
-                if filtered.empty: filtered = df_tasks.copy()
+                filtered = filtered[~filtered['title'].astype(str).str.contains("新手|操作教學", na=False, regex=True)]
+                if filtered.empty: 
+                    filtered = df_tasks.copy()
+                    filtered = filtered[~filtered['title'].astype(str).str.contains("新手|操作教學", na=False, regex=True)]
                 
                 current_today_str = str(date.today())
                 if st.session_state.daily_date != current_today_str or st.session_state.daily_seed is None:
@@ -210,7 +218,6 @@ if df_users is not None:
                 
                 st.caption(f"📅 今日「{lvl}」任務清單已刷新，限額展示 {len(display_tasks)} 題")
                 
-                # 🟢 [核心擴充] 將正式任務加上「上傳摺疊面板」，讓同學真正能執行任務！
                 for idx, task in display_tasks.iterrows():
                     with st.container():
                         st.markdown(f'<div class="mission-card"><b>{task["title"]}</b><br><small>{task["content"]}</small></div>', unsafe_allow_html=True)
@@ -220,7 +227,6 @@ if df_users is not None:
                                 try:
                                     res = cloudinary.uploader.upload(up_task, folder="CSMU_AGENT", transformation=[{'width': 800, 'quality': "auto:eco"}])
                                     
-                                    # 強制轉型確保留存
                                     df_users['photo_list'] = df_users['photo_list'].astype(str)
                                     df_users['task_list'] = df_users['task_list'].astype(str)
                                     target_done_col = f"done_{lvl}"
@@ -229,7 +235,6 @@ if df_users is not None:
                                     cp = safe_str(user.get("photo_list"))
                                     ct = safe_str(user.get("task_list"))
                                     
-                                    # 寫入資料
                                     df_users.at[u_idx, "photo_list"] = str(res["secure_url"] if cp == "" else f"{cp},{res['secure_url']}")
                                     df_users.at[u_idx, "task_list"] = str(task["title"] if ct == "" else f"{ct},{task['title']}")
                                     df_users.at[u_idx, target_done_col] = str(safe_int(user.get(target_done_col)) + 1)
@@ -243,8 +248,7 @@ if df_users is not None:
 
         # --- Tab 2: 進度 ---
         with tabs[1]:
-            is_locked = not st.session_state.t_done.get('tuto_prog', False)
-            if is_locked:
+            if show_tuto_prog:  # 🟢 替換為絕對指令
                 st.markdown(f'<div class="tutorial-box"><h3>📊 新手指引：操作教學</h3><p>任務數量依照難度而有不同，完成對應數量可獲得抽獎券一張，不限完成次數，可無限次累積完成任務！。</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
                 if st.button("我已閱讀完畢", key="btn_t2", use_container_width=True): mark_tuto_step('tuto_prog')
             st.subheader("📊 任務進度")
@@ -275,8 +279,7 @@ if df_users is not None:
 
         # --- Tab 4: 地下城 ---
         with tabs[3]:
-            is_locked = not st.session_state.t_done.get('tuto_gamble', False)
-            if is_locked:
+            if show_tuto_gamble:  # 🟢 替換為絕對指令
                 st.markdown(f'<div class="tutorial-box"><h3>🎰 新手指引：操作教學</h3><p>每次博弈消耗一張，最高可獲得4張，最低則一無所獲。累積 4 次失敗有保底！</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
                 if st.button("我已閱讀完畢", key="btn_t4", use_container_width=True): mark_tuto_step('tuto_gamble')
             st.markdown('<div class="casino-zone"><h2>🎰 賭賭賭</h2><p>命運的分叉路，翻倍或一無所有。</p></div>', unsafe_allow_html=True)
@@ -321,8 +324,7 @@ if df_users is not None:
 
         # --- Tab 5: 設定 ---
         with tabs[4]:
-            is_locked = not st.session_state.t_done.get('tuto_set', False)
-            if is_locked:
+            if show_tuto_set:  # 🟢 替換為絕對指令
                 st.markdown(f'<div class="tutorial-box"><h3>⚙️ 新手指引：操作教學</h3><p>可在此修改帳號名稱，後續他人僅可見你的暱稱。</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
                 if st.button("我已了解設定功能", key="btn_t3", use_container_width=True): mark_tuto_step('tuto_set')
             st.subheader("⚙️ 帳號設定")
