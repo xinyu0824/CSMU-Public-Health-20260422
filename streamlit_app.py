@@ -106,7 +106,7 @@ if df_users is not None:
         u_match = df_users[df_users["Student ID(預設密碼)"].astype(str).str.contains(st.session_state.student_id)]
         user = u_match.iloc[0]; u_idx = u_match.index[0]
 
-        #🟢 修正後的整數防禦版（全面相容 1, 1.0, "1"）：
+        # 🟢 1. 修正後的整數防禦版（全面相容 1, 1.0, "1"）
         show_tuto_task = False if (safe_int(user.get('tuto_task')) == 1 or st.session_state.t_done.get('tuto_task', False)) else True
         st.session_state.t_done['tuto_task'] = not show_tuto_task
 
@@ -119,7 +119,13 @@ if df_users is not None:
         show_tuto_set = False if (safe_int(user.get('tuto_set')) == 1 or st.session_state.t_done.get('tuto_set', False)) else True
         st.session_state.t_done['tuto_set'] = not show_tuto_set
         
+        # 🟢 2. 強效盲讀重算機制（精準歸位）
+        m_base = (safe_int(user.get('done_初階')) // 4) + \
+                 (safe_int(user.get('done_中階')) // 3) + \
+                 (safe_int(user.get('done_高階')) // 2) + \
+                 (safe_int(user.get('done_傳奇')) * 1)
                  
+        # 🟢 3. 券數與相簿統計
         total_tickets = max(0, m_base + safe_int(user.get('gamble_balance')) + safe_int(user.get('extra_tickets')))
         p_str = safe_str(user.get("photo_list"))
         p_list = [u for u in p_str.split(",") if u.strip() != ""]
