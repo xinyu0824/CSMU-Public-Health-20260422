@@ -98,6 +98,7 @@ if df_users is not None:
                 correct = db_pwd if db_pwd != "" else db_id
                 if pwd.strip() == correct:
                     st.session_state.login, st.session_state.student_id = True, db_id
+                    st.session_state.t_done = {} # 登入清除舊記憶
                     st.rerun()
                 else: st.error("密碼錯誤")
     else:
@@ -105,18 +106,21 @@ if df_users is not None:
         u_match = df_users[df_users["Student ID(預設密碼)"].astype(str).str.contains(st.session_state.student_id)]
         user = u_match.iloc[0]; u_idx = u_match.index[0]
 
-        # 🟢 [最高防禦] 4 條絕對指令：雙軌防線（本地記憶優先，雲端為輔）
-        # 只要本地或雲端其中一個是完成狀態，show_tuto 就為 False (隱藏)
-        show_tuto_task = not (st.session_state.t_done.get('tuto_task', False) or safe_str(user.get('tuto_task')) == "1")
+        # 🟢 [最高防禦] 4 條絕對指令：精準判讀雲端與本地數值，0 (或空值) 顯示，1 隱藏
+        # 1. 任務挑選指引
+        show_tuto_task = False if (safe_str(user.get('tuto_task')) == "1" or st.session_state.t_done.get('tuto_task', False)) else True
         st.session_state.t_done['tuto_task'] = not show_tuto_task
 
-        show_tuto_prog = not (st.session_state.t_done.get('tuto_prog', False) or safe_str(user.get('tuto_prog')) == "1")
+        # 2. 進度追蹤指引
+        show_tuto_prog = False if (safe_str(user.get('tuto_prog')) == "1" or st.session_state.t_done.get('tuto_prog', False)) else True
         st.session_state.t_done['tuto_prog'] = not show_tuto_prog
 
-        show_tuto_gamble = not (st.session_state.t_done.get('tuto_gamble', False) or safe_str(user.get('tuto_gamble')) == "1")
+        # 3. 地下博弈指引
+        show_tuto_gamble = False if (safe_str(user.get('tuto_gamble')) == "1" or st.session_state.t_done.get('tuto_gamble', False)) else True
         st.session_state.t_done['tuto_gamble'] = not show_tuto_gamble
 
-        show_tuto_set = not (st.session_state.t_done.get('tuto_set', False) or safe_str(user.get('tuto_set')) == "1")
+        # 4. 帳號設定指引
+        show_tuto_set = False if (safe_str(user.get('tuto_set')) == "1" or st.session_state.t_done.get('tuto_set', False)) else True
         st.session_state.t_done['tuto_set'] = not show_tuto_set
 
         # 強效盲讀重算機制
@@ -136,7 +140,10 @@ if df_users is not None:
 
         with st.sidebar:
             st.metric("抽獎券總額", f"{total_tickets} 張")
-            if st.button("🚪 帳號登出"): st.session_state.login = False; st.rerun()
+            if st.button("🚪 帳號登出"): 
+                st.session_state.login = False
+                st.session_state.t_done = {}
+                st.rerun()
 
         tabs = st.tabs(["🎯 任務挑選", "📊 進度追蹤", "🏆 排行榜", "🎰 地下博弈", "⚙️ 帳號設定"])
 
@@ -173,10 +180,11 @@ if df_users is not None:
 
         # --- Tab 1: 任務挑選 ---
         with tabs[0]:
-            if show_tuto_task:  # 🟢 替換為絕對指令
+            if show_tuto_task:  # 🟢 絕對指令判定
                 st.markdown(f'<div class="tutorial-box"><h3>🚀新手指引：操作教學</h3><p>請上傳任意一張圖片測試功能。完成後將解鎖四種難度等級任務，此任務將計入「初階」進度 +1。</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
                 up_n = st.file_uploader("上傳任務照片", type=['png','jpg','jpeg'], key="up_newbie")
                 if up_n and st.button("確認送出，解鎖四種難度等級", use_container_width=True):
+                    is_success = False 
                     try:
                         res = cloudinary.uploader.upload(up_n, folder="CSMU_AGENT", transformation=[{'width': 800, 'quality': "auto:eco"}])
                         df_users['photo_list'] = df_users['photo_list'].astype(str)
@@ -186,8 +194,19 @@ if df_users is not None:
                         df_users.at[u_idx, "photo_list"] = str(res["secure_url"] if cp == "" else f"{cp},{res['secure_url']}")
                         df_users.at[u_idx, "task_list"] = str("新手指引：操作教學" if safe_str(user.get("task_list")) == "" else f"{safe_str(user.get('task_list'))},新手指引：操作教學")
                         df_users.at[u_idx, "done_初階"] = str(safe_int(user.get("done_初階")) + 1)
-                        mark_tuto_step('tuto_task')
-                    except: st.error("上傳失敗")
+                        
+                        st.session_state.t_done['tuto_task'] = True
+                        df_users['tuto_task'] = df_users['tuto_task'].astype(str)
+                        df_users.at[u_idx, 'tuto_task'] = "1"
+                        
+                        conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users)
+                        st.cache_data.clear()
+                        is_success = True 
+                    except Exception as e:
+                        st.error(f"上傳失敗，錯誤原因：{e}") 
+                    
+                    if is_success:
+                        st.rerun() 
             else:
                 st.write("### 📍選擇任務難度")
                 lvl = st.radio("難度分級", ["初階", "中階", "高階", "傳奇"], horizontal=True, label_visibility="collapsed")
@@ -224,6 +243,7 @@ if df_users is not None:
                         with st.expander("📸 執行此任務 (上傳情報)"):
                             up_task = st.file_uploader("選擇照片", type=['png','jpg','jpeg'], key=f"up_task_{idx}")
                             if up_task and st.button("確認達成任務", key=f"btn_task_{idx}", use_container_width=True):
+                                is_success = False 
                                 try:
                                     res = cloudinary.uploader.upload(up_task, folder="CSMU_AGENT", transformation=[{'width': 800, 'quality': "auto:eco"}])
                                     
@@ -241,14 +261,17 @@ if df_users is not None:
                                     
                                     conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users)
                                     st.cache_data.clear()
-                                    st.success(f"✅ 【{task['title']}】情報已成功回傳總部！進度 +1")
-                                    st.rerun()
+                                    is_success = True 
                                 except Exception as e: 
-                                    st.error("上傳失敗，請檢查網路狀態或稍微縮小圖片尺寸再試一次。")
+                                    st.error(f"上傳失敗，錯誤原因：{e}") 
+                                
+                                if is_success:
+                                    st.toast(f"✅ 【{task['title']}】情報已成功回傳總部！進度 +1")
+                                    st.rerun() 
 
         # --- Tab 2: 進度 ---
         with tabs[1]:
-            if show_tuto_prog:  # 🟢 替換為絕對指令
+            if show_tuto_prog:  # 🟢 絕對指令判定
                 st.markdown(f'<div class="tutorial-box"><h3>📊 新手指引：操作教學</h3><p>任務數量依照難度而有不同，完成對應數量可獲得抽獎券一張，不限完成次數，可無限次累積完成任務！。</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
                 if st.button("我已閱讀完畢", key="btn_t2", use_container_width=True): mark_tuto_step('tuto_prog')
             st.subheader("📊 任務進度")
@@ -279,7 +302,7 @@ if df_users is not None:
 
         # --- Tab 4: 地下城 ---
         with tabs[3]:
-            if show_tuto_gamble:  # 🟢 替換為絕對指令
+            if show_tuto_gamble:  # 🟢 絕對指令判定
                 st.markdown(f'<div class="tutorial-box"><h3>🎰 新手指引：操作教學</h3><p>每次博弈消耗一張，最高可獲得4張，最低則一無所獲。累積 4 次失敗有保底！</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
                 if st.button("我已閱讀完畢", key="btn_t4", use_container_width=True): mark_tuto_step('tuto_gamble')
             st.markdown('<div class="casino-zone"><h2>🎰 賭賭賭</h2><p>命運的分叉路，翻倍或一無所有。</p></div>', unsafe_allow_html=True)
@@ -324,7 +347,7 @@ if df_users is not None:
 
         # --- Tab 5: 設定 ---
         with tabs[4]:
-            if show_tuto_set:  # 🟢 替換為絕對指令
+            if show_tuto_set:  # 🟢 絕對指令判定
                 st.markdown(f'<div class="tutorial-box"><h3>⚙️ 新手指引：操作教學</h3><p>可在此修改帳號名稱，後續他人僅可見你的暱稱。</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
                 if st.button("我已了解設定功能", key="btn_t3", use_container_width=True): mark_tuto_step('tuto_set')
             st.subheader("⚙️ 帳號設定")
