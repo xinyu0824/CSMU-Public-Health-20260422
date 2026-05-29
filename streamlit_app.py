@@ -53,7 +53,6 @@ st.markdown("""
     div[role="radiogroup"] { display: flex !important; justify-content: center !important; gap: 12px !important; }
     div[role="radiogroup"] > label { flex: 1 !important; min-width: 65px !important; background-color: #FFFFFF !important; border: 1px solid #D9D9D9 !important; border-radius: 10px; padding: 15px 0 !important; cursor: pointer; display: flex !important; justify-content: center !important; }
     div[role="radiogroup"] label div[data-baseweb="radio"] > div:first-child { display: none !important; }
-    /* 微調 Expander 樣式使其貼合卡片 */
     [data-testid="stExpander"] { border: 1px solid #E6E6E1; border-top: none; border-radius: 0 0 6px 6px; margin-bottom: 15px; }
     </style>
     """, unsafe_allow_html=True)
@@ -86,7 +85,7 @@ if df_users is not None:
             return nick if nick != "" else str(row['name(姓名)'])
             
         login_labels = df_users.apply(get_clean_login_label, axis=1).dropna().tolist()
-        sel = st.selectbox("帳號選擇（預設為姓名，可於登入後變更暱稱）", ["你是誰..."] + login_labels)
+        sel = st.selectbox("帳號選擇（若已變更暱稱，請尋找你的暱稱代號）", ["你是誰..."] + login_labels)
         pwd = st.text_input("密碼（預設為學號）", type="password")
         
         if st.button("登入"):
@@ -98,7 +97,7 @@ if df_users is not None:
                 correct = db_pwd if db_pwd != "" else db_id
                 if pwd.strip() == correct:
                     st.session_state.login, st.session_state.student_id = True, db_id
-                    st.session_state.t_done = {} # 登入清除舊記憶
+                    st.session_state.t_done = {} 
                     st.rerun()
                 else: st.error("密碼錯誤")
     else:
@@ -106,7 +105,7 @@ if df_users is not None:
         u_match = df_users[df_users["Student ID(預設密碼)"].astype(str).str.contains(st.session_state.student_id)]
         user = u_match.iloc[0]; u_idx = u_match.index[0]
 
-        # 🟢 [整數防禦版絕對指令] 全面相容 1, 1.0, "1"
+        # 🟢 整數防禦版絕對指令
         show_tuto_task = False if (safe_int(user.get('tuto_task')) == 1 or st.session_state.t_done.get('tuto_task', False)) else True
         st.session_state.t_done['tuto_task'] = not show_tuto_task
 
@@ -119,7 +118,7 @@ if df_users is not None:
         show_tuto_set = False if (safe_int(user.get('tuto_set')) == 1 or st.session_state.t_done.get('tuto_set', False)) else True
         st.session_state.t_done['tuto_set'] = not show_tuto_set
 
-        # 🟢 [核心新增：被動補發捕獲防線] 如果四個指引在雲端都是 1，但 gift_given 還不是 1，立刻在後台直接發券更新！
+        # 被動補發捕獲防線
         if safe_int(user.get('tuto_task')) == 1 and safe_int(user.get('tuto_prog')) == 1 and \
            safe_int(user.get('tuto_gamble')) == 1 and safe_int(user.get('tuto_set')) == 1:
             if safe_int(user.get('gift_given')) != 1:
@@ -151,6 +150,7 @@ if df_users is not None:
             if st.button("🚪 帳號登出"): 
                 st.session_state.login = False
                 st.session_state.t_done = {}
+                st.cache_data.clear() # 🟢 登出時順便洗滌快取，確保登入選單是最新的
                 st.rerun()
 
         tabs = st.tabs(["🎯 任務挑選", "📊 進度追蹤", "🏆 排行榜", "🎰 地下博弈", "⚙️ 帳號設定"])
@@ -160,7 +160,6 @@ if df_users is not None:
             df_users[col] = df_users[col].astype(str)
             df_users.at[u_idx, col] = "1"
             
-            # 🟢 使用 safe_int 同步判定按鈕按下去的瞬間是否集滿 4 個
             db_task = 1 if col == 'tuto_task' else safe_int(df_users.at[u_idx, 'tuto_task'])
             db_prog = 1 if col == 'tuto_prog' else safe_int(df_users.at[u_idx, 'tuto_prog'])
             db_gamble = 1 if col == 'tuto_gamble' else safe_int(df_users.at[u_idx, 'tuto_gamble'])
@@ -177,10 +176,7 @@ if df_users is not None:
             st.cache_data.clear()
             st.rerun()
 
-        # 🟢 [核心修復：結業大型攔截小視窗] 徹底轉換成 safe_int 驗證，防止 1.0 導致彈窗失效
-        if safe_int(user.get('tuto_task')) == 1 and safe_int(user.get('tuto_prog')) == 1 and \
-           safe_int(user.get('tuto_gamble')) == 1 and safe_int(user.get('tuto_set')) == 1 and \
-           safe_int(user.get('gift_given')) == 1 and not st.session_state.p_shown:
+        if done_count == 4 and safe_str(user.get('gift_given')) == "1" and not st.session_state.p_shown:
             st.balloons()
             st.markdown("""
                 <div style="background-color:#FFF9E6; padding:35px; border-radius:20px; text-align:center; border:4px solid #FFC107; box-shadow: 0 10px 30px rgba(0,0,0,0.1); margin-bottom: 25px;">
@@ -376,6 +372,10 @@ if df_users is not None:
                 df_users['password(自訂密碼)'] = df_users['password(自訂密碼)'].astype(str)
                 df_users.at[u_idx, "Nickname(變更暱稱)"] = str(nn)
                 if np.strip() != "": df_users.at[u_idx, "password(自訂密碼)"] = str(np)
-                conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users); st.success("修改成功")
+                
+                conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users)
+                st.cache_data.clear() # 🟢 [核心修復] 修改暱稱成功時，立即洗滌全站快取記憶！
+                st.success("修改成功")
+                st.rerun() # 🟢 [核心修復] 強制網頁重整，讓全域變數與登入端同步最新暱稱！
 
 else: st.error("❌ 連線失敗")
