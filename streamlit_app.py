@@ -85,7 +85,7 @@ if df_users is not None:
             return nick if nick != "" else str(row['name(姓名)'])
             
         login_labels = df_users.apply(get_clean_login_label, axis=1).dropna().tolist()
-        sel = st.selectbox("帳號選擇（若已變更暱稱，請尋找你的暱稱代號）", ["你是誰..."] + login_labels)
+        sel = st.selectbox("帳號選擇（預設為姓名，登入可變更暱稱）", ["你是誰..."] + login_labels)
         pwd = st.text_input("密碼（預設為學號）", type="password")
         
         if st.button("登入"):
@@ -143,7 +143,7 @@ if df_users is not None:
 
         display_title_name = safe_str(user.get("Nickname(變更暱稱)")) if safe_str(user.get("Nickname(變更暱稱)")) != "" else user["name(姓名)"]
         
-        st.markdown(f'<div class="title-wrapper"><span class="agent-badge">{get_agent_rank(total_tickets, len(p_list))}</span><span class="main-title">{display_title_name} 的觀測終端</span></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="title-wrapper"><span class="agent-badge">{get_agent_rank(total_tickets, len(p_list))}</span><span class="main-title">{display_title_name} 的介面</span></div>', unsafe_allow_html=True)
 
         with st.sidebar:
             st.metric("抽獎券總額", f"{total_tickets} 張")
@@ -183,9 +183,9 @@ if df_users is not None:
                     <h1 style="color:#FFC107; margin:0; font-size: 2.2rem;">🎊 新手特訓合格 🎊</h1>
                     <p style="font-size:1.2rem; margin-top:12px; color: #5F5F5F; font-weight: bold;">你已完全瀏覽 4 個新手任務，特發放一張抽獎券！</p>
                     <div style="background:#FFC107; color:white; display:inline-block; padding:8px 25px; border-radius:10px; font-size: 1.4rem; font-weight: bold; margin: 15px 0;">
-                        🎁 獎勵已入庫：抽獎券 +1 張
+                        🎁 獎勵已發放：抽獎券 +1 張
                     </div>
-                    <p style="color:#8C8C8C; font-size: 0.95rem; margin-top: 5px;">本金已自動存入你的特工終端。點擊下方按鈕正式解除鎖定！</p>
+                    <p style="color:#8C8C8C; font-size: 0.95rem; margin-top: 5px;">抽獎券已自動存入你的帳號啦～！</p>
                 </div>
             """, unsafe_allow_html=True)
             if st.button("進入（點擊解鎖全部功能）", use_container_width=True):
@@ -249,7 +249,7 @@ if df_users is not None:
                 else:
                     display_tasks = filtered
                 
-                st.caption(f"📅 今日「{lvl}」任務清單已刷新，限額展示 {len(display_tasks)} 題")
+                st.caption(f"📅 今日「{lvl}」任務清單已刷新，每日會刷新 {len(display_tasks)} 題")
                 
                 for idx, task in display_tasks.iterrows():
                     with st.container():
