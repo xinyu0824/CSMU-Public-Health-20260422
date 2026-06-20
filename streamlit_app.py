@@ -1,381 +1,288 @@
 import streamlit as st
 import pandas as pd
-import cloudinary
-import cloudinary.uploader
 from streamlit_gsheets import GSheetsConnection
-import json
-import random
+import re
+import time
 from datetime import datetime, date
 
 # --- 1. 配置與強效初始化 ---
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1cxSA5qvLKmu2FjYR2xZI3fdSocXS_VCOXYUdk6C0YVA/edit?usp=sharing"
 
-st.set_page_config(page_title="📸 導生聚：拍拍挑戰", layout="centered")
+st.set_page_config(page_title="🧠 特工觀測站：終極複習備忘終端", layout="wide")
 
-if 'init_done' not in st.session_state:
-    st.session_state.update({
-        'login': False, 'student_id': None, 'selected_lvl': "初階", 
-        't_done': {}, 'g_res': None, 'p_shown': False, 'init_done': True,
-        'daily_seed': None, 'daily_date': ""
-    })
+# 初始化顯示答案的暫存
+if 'reveal_cloze' not in st.session_state:
+    st.session_state.reveal_cloze = {}
 
 # --- 數據安全工具 ---
 def safe_str(val):
-    if pd.isna(val) or str(val).strip().lower() == "nan" or str(val).strip() == "0": return ""
+    if pd.isna(val) or str(val).strip().lower() == "nan": return ""
     return str(val).strip()
 
 def safe_int(val):
-    try: 
+    try:
         s = safe_str(val)
         return int(float(s)) if s != "" else 0
     except: return 0
 
-def get_agent_rank(tickets, photo_count):
-    if photo_count == 0: return "🆕尚未獲得稱號"
-    if tickets >= 11: return "🌌 傳奇拍拍"
-    elif tickets >= 7: return "🎖️ 大師拍拍"
-    elif tickets >= 4: return "🛡️ 菁英拍拍"
-    else: return "🌱 實習拍拍"
-
+# --- 2. 科技感流線樣式 ---
 st.markdown("""
     <style>
-    .stApp { background-color: #F5F5F0; }
-    h1, h2, h3, p, label { color: #5F5F5F !important; font-family: 'Noto Sans TC', sans-serif; }
-    .agent-badge { display: inline-block; padding: 4px 14px; background-color: #5F5F5F; color: #FFFFFF !important; border-radius: 20px; font-size: 0.85rem; font-weight: bold; margin-right: 12px; }
-    .t-badge { background-color: #28a745; color: white !important; padding: 4px 14px; border-radius: 12px; font-size: 0.9rem; font-weight: bold; box-shadow: 1px 1px 4px rgba(0,0,0,0.1); }
-    .tutorial-box { background-color: #FFFFFF; padding: 22px; border-radius: 15px; border-left: 6px solid #FFC107; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 25px; }
-    .tutorial-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; }
-    .mission-card { background-color: #FFFFFF; padding: 18px; border: 1px solid #E6E6E1; border-radius: 6px; margin-bottom: 5px; border-left: 6px solid #FFC107; }
-    .leaderboard-card { background-color: #FFFFFF; padding: 15px; border-radius: 12px; border: 1px solid #E6E6E1; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-    .rank-num { font-weight: bold; font-size: 1.2rem; color: #FFC107; width: 35px; }
-    .casino-zone { background: linear-gradient(135deg, #1a1a1a 0%, #3d3d3d 100%); color: #FFC107 !important; padding: 30px; border-radius: 20px; border: 3px solid #FFC107; text-align: center; margin-bottom: 25px; }
-    .win-card { background: linear-gradient(135deg, #FFD700 0%, #FFC107 100%); color: white !important; padding: 30px; border-radius: 20px; text-align: center; box-shadow: 0 10px 25px rgba(255,193,7,0.4); margin: 20px 0; }
-    div[role="radiogroup"] { display: flex !important; justify-content: center !important; gap: 12px !important; }
-    div[role="radiogroup"] > label { flex: 1 !important; min-width: 65px !important; background-color: #FFFFFF !important; border: 1px solid #D9D9D9 !important; border-radius: 10px; padding: 15px 0 !important; cursor: pointer; display: flex !important; justify-content: center !important; }
-    div[role="radiogroup"] label div[data-baseweb="radio"] > div:first-child { display: none !important; }
-    [data-testid="stExpander"] { border: 1px solid #E6E6E1; border-top: none; border-radius: 0 0 6px 6px; margin-bottom: 15px; }
+    .stApp { background-color: #F8F9FA; }
+    h1, h2, h3, p, label { color: #4A4A4A !important; font-family: 'Noto Sans TC', sans-serif; }
+    .cloze-card { background-color: #FFFFFF; padding: 25px; border-radius: 15px; border-left: 6px solid #4A90E2; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 20px; font-size: 1.15rem; line-height: 1.8; }
+    .todo-card { background-color: #FFFFFF; padding: 20px; border-radius: 12px; border: 1px solid #E6E6E1; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; color: white !important; margin-right: 5px; margin-bottom: 5px; }
+    .badge-high { background-color: #DC3545; }
+    .badge-mid { background-color: #FFC107; color: #4A4A4A !important; }
+    .badge-low { background-color: #28A745; }
+    .badge-cat { background-color: #6C757D; }
+    .badge-date { background-color: #17A2B8; }
+    .dependency-text { color: #8C8C8C; font-size: 0.85rem; font-style: italic; margin-top: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 服務連線 ---
-cloudinary.config(cloud_name=st.secrets["CLOUDINARY_CLOUD_NAME"], api_key=st.secrets["CLOUDINARY_API_KEY"], api_secret=st.secrets["CLOUDINARY_API_SECRET"], secure=True)
+# --- 3. 雲端資料庫連線 ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=1)
 def load_data():
     try:
-        u = conn.read(spreadsheet=GSHEET_URL, worksheet="user")
-        t = conn.read(spreadsheet=GSHEET_URL, worksheet="task")
-        return u, t
-    except: return None, None
+        c = conn.read(spreadsheet=GSHEET_URL, worksheet="cloze")
+        m = conn.read(spreadsheet=GSHEET_URL, worksheet="memo")
+        return c, m
+    except:
+        return pd.DataFrame(columns=['id', 'subject', 'unit', 'topic', 'content']), pd.DataFrame(columns=['id', 'title', 'detail', 'category', 'urgency', 'importance', 'status', 'parent_id', 'order_num', 'target_date'])
 
-df_users, df_tasks = load_data()
+df_cloze, df_memo = load_data()
 
-# --- 3. 核心流程 ---
-if df_users is not None:
-    req_cols = ['tuto_task', 'tuto_prog', 'tuto_gamble', 'tuto_set', 'gift_given', 'extra_tickets', 'gamble_balance', 'done_初階', 'done_中階', 'done_高階', 'done_傳奇', 'gamble_profit', 'photo_list', 'task_list', 'task_cooldowns', 'Nickname(變更暱稱)', 'password(自訂密碼)', 'gamble_count', 'loss_count']
-    for c in req_cols:
-        if c not in df_users.columns: df_users[c] = ""
+# 確保基礎欄位存在（新增了科目、單元、主題與自訂日期欄位）
+for col in ['id', 'subject', 'unit', 'topic', 'content']:
+    if col not in df_cloze.columns: df_cloze[col] = ""
+for col in ['id', 'title', 'detail', 'category', 'urgency', 'importance', 'status', 'parent_id', 'order_num', 'target_date']:
+    if col not in df_memo.columns: df_memo[col] = ""
 
-    if not st.session_state.login:
-        st.title("公衛二甲：導生聚活動")
-        
-        def get_clean_login_label(row):
-            nick = safe_str(row.get("Nickname(變更暱稱)", ""))
-            return nick if nick != "" else str(row['name(姓名)'])
-            
-        login_labels = df_users.apply(get_clean_login_label, axis=1).dropna().tolist()
-        sel = st.selectbox("帳號選擇（預設為姓名，登入可變更暱稱）", ["你是誰..."] + login_labels)
-        pwd = st.text_input("密碼（預設為學號）", type="password")
-        
-        if st.button("登入"):
-            match = df_users[(df_users['name(姓名)'] == sel) | (df_users['Nickname(變更暱稱)'] == sel)]
-            if not match.empty:
-                u_row = match.iloc[0]
-                db_id = str(u_row["Student ID(預設密碼)"]).strip().split('.')[0]
-                db_pwd = safe_str(u_row.get("password(自訂密碼)", ""))
-                correct = db_pwd if db_pwd != "" else db_id
-                if pwd.strip() == correct:
-                    st.session_state.login, st.session_state.student_id = True, db_id
-                    st.session_state.t_done = {} 
-                    st.rerun()
-                else: st.error("密碼錯誤")
+# --- 4. 主介面分頁架構 ---
+tabs = st.tabs(["🧠 精密考點挖空複習", "📋 深度任務備忘錄"])
+
+# ==================== TAB 1: 挖空複習系統 ====================
+with tabs[0]:
+    st.title("🧠 醫學核心考點精密複習系統")
+    
+    if df_cloze.empty or len(df_cloze) == 0:
+        st.info("💡 目前題庫空空如也，請先去 Google Sheets 的 `cloze` 工作表添加含有 {{關鍵字}} 的句子唷！")
     else:
-        # 已登入
-        u_match = df_users[df_users["Student ID(預設密碼)"].astype(str).str.contains(st.session_state.student_id)]
-        user = u_match.iloc[0]; u_idx = u_match.index[0]
-
-        # 🟢 整數防禦版絕對指令
-        show_tuto_task = False if (safe_int(user.get('tuto_task')) == 1 or st.session_state.t_done.get('tuto_task', False)) else True
-        st.session_state.t_done['tuto_task'] = not show_tuto_task
-
-        show_tuto_prog = False if (safe_int(user.get('tuto_prog')) == 1 or st.session_state.t_done.get('tuto_prog', False)) else True
-        st.session_state.t_done['tuto_prog'] = not show_tuto_prog
-
-        show_tuto_gamble = False if (safe_int(user.get('tuto_gamble')) == 1 or st.session_state.t_done.get('tuto_gamble', False)) else True
-        st.session_state.t_done['tuto_gamble'] = not show_tuto_gamble
-
-        show_tuto_set = False if (safe_int(user.get('tuto_set')) == 1 or st.session_state.t_done.get('tuto_set', False)) else True
-        st.session_state.t_done['tuto_set'] = not show_tuto_set
-
-        # 被動補發捕獲防線
-        if safe_int(user.get('tuto_task')) == 1 and safe_int(user.get('tuto_prog')) == 1 and \
-           safe_int(user.get('tuto_gamble')) == 1 and safe_int(user.get('tuto_set')) == 1:
-            if safe_int(user.get('gift_given')) != 1:
-                df_users['gift_given'] = df_users['gift_given'].astype(str)
-                df_users['extra_tickets'] = df_users['extra_tickets'].astype(str)
-                df_users.at[u_idx, 'gift_given'] = "1"
-                df_users.at[u_idx, 'extra_tickets'] = str(safe_int(user.get('extra_tickets')) + 1)
-                conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users)
-                st.cache_data.clear()
-                st.rerun()
-
-        # 強效盲讀重算機制
-        m_base = (safe_int(user.get('done_初階')) // 4) + \
-                 (safe_int(user.get('done_中階')) // 3) + \
-                 (safe_int(user.get('done_高階')) // 2) + \
-                 (safe_int(user.get('done_傳奇')) * 1)
-                 
-        total_tickets = max(0, m_base + safe_int(user.get('gamble_balance')) + safe_int(user.get('extra_tickets')))
-        p_str = safe_str(user.get("photo_list"))
-        p_list = [u for u in p_str.split(",") if u.strip() != ""]
-        done_count = sum(1 for v in st.session_state.t_done.values() if v)
-
-        display_title_name = safe_str(user.get("Nickname(變更暱稱)")) if safe_str(user.get("Nickname(變更暱稱)")) != "" else user["name(姓名)"]
+        # 🟢 階層式精密連動篩選面板
+        st.write("### 🔍 考點精準打擊篩選")
+        c1, c2, c3 = st.columns(3)
         
-        st.markdown(f'<div class="title-wrapper"><span class="agent-badge">{get_agent_rank(total_tickets, len(p_list))}</span><span class="main-title">{display_title_name} 的介面</span></div>', unsafe_allow_html=True)
+        # 1. 科目篩選
+        subject_list = ["全部科目"] + sorted([x for x in df_cloze['subject'].dropna().unique() if safe_str(x) != ""])
+        with c1:
+            sel_subject = st.selectbox("選擇醫學科目", subject_list)
+        
+        df_filtered = df_cloze.copy()
+        if sel_subject != "全部科目":
+            df_filtered = df_filtered[df_filtered['subject'] == sel_subject]
+            
+        # 2. 單元篩選
+        unit_list = ["全部單元"] + sorted([x for x in df_filtered['unit'].dropna().unique() if safe_str(x) != ""])
+        with c2:
+            sel_unit = st.selectbox("選擇講義單元", unit_list)
+            
+        if sel_unit != "全部單元":
+            df_filtered = df_filtered[df_filtered['unit'] == sel_unit]
+            
+        # 3. 主題篩選
+        topic_list = ["全部主題"] + sorted([x for x in df_filtered['topic'].dropna().unique() if safe_str(x) != ""])
+        with c3:
+            sel_topic = st.selectbox("選擇知識點主題", topic_list)
+            
+        if sel_topic != "全部主題":
+            df_filtered = df_filtered[df_filtered['topic'] == sel_topic]
 
-        with st.sidebar:
-            st.metric("抽獎券總額", f"{total_tickets} 張")
-            if st.button("🚪 帳號登出"): 
-                st.session_state.login = False
-                st.session_state.t_done = {}
-                st.cache_data.clear() # 🟢 登出時順便洗滌快取，確保登入選單是最新的
+        st.write("---")
+        
+        # 渲染篩選後的題目
+        if df_filtered.empty:
+            st.warning("⚠️ 目前選定的分類下沒有任何考點，請調整篩選條件。")
+        else:
+            for idx, row in df_filtered.iterrows():
+                q_id = str(row['id'])
+                raw_content = safe_str(row['content'])
+                if not raw_content: continue
+                
+                answers = re.findall(r"\{\{(.*?)\}\}", raw_content)
+                display_text = re.sub(r"\{\{.*?\}\}", " [ ______ ] ", raw_content)
+                
+                with st.container():
+                    # 顯示該題目的階層標籤，一眼看懂進度
+                    st.markdown(f"""
+                        <span class="badge badge-cat">{row['subject']}</span>
+                        <span class="badge badge-mid">{row['unit']}</span>
+                        <span class="badge" style="background-color:#4A90E2;">{row['topic']}</span>
+                    """, unsafe_allow_html=True)
+                    
+                    st.markdown(f'<div class="cloze-card"><b>考點：</b> {display_text}</div>', unsafe_allow_html=True)
+                    
+                    # 動態生成填空輸入框
+                    cols = st.columns(max(1, len(answers)))
+                    for i, ans in enumerate(answers):
+                        with cols[i]:
+                            st.text_input(f"填空輸入 ({i+1})", key=f"guess_{q_id}_{i}")
+                    
+                    # 查看答案控制
+                    col_btn, col_ans = st.columns([1, 5])
+                    with col_btn:
+                        if st.button("查看解答", key=f"btn_show_{q_id}"):
+                            st.session_state.reveal_cloze[q_id] = True
+                    with col_ans:
+                        if st.session_state.reveal_cloze.get(q_id, False):
+                            ans_str = " │ ".join([f"({i+1}) {a}" for i, a in enumerate(answers)])
+                            st.success(f"🔑 正確解答：{ans_str}")
+                    st.write("---")
+
+# ==================== TAB 2: 深度任務備忘錄 ====================
+with tabs[1]:
+    st.title("📋 特工專屬深度任務相依備忘錄")
+    
+    # --- 新增任務區塊 ---
+    with st.expander("➕ 新增極詳細待辦事項（支援自訂時間軸）"):
+        with st.form("add_task_form"):
+            t_title = st.text_input("任務或作業名稱*", placeholder="寫下要做的事...")
+            t_detail = st.text_area("行動精密細節 (詳細寫下執行步驟，更有動力執行！)", placeholder="例如：1.先查閱3篇文獻 2.跟組員確認框架...")
+            
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                t_cat = st.selectbox("所屬群組 (分組)", ["課業修讀", "系學會", "GDGOC CSMU", "私人生活", "其他工作"])
+            with c2:
+                t_urg = st.radio("急迫性", ["高", "中", "低"], horizontal=True)
+            with c3:
+                t_imp = st.radio("重要性", ["高", "中", "低"], horizontal=True)
+            with c4:
+                # 🟢 使用者自定義日期時間軸（Date Input）
+                t_date = st.date_input("自訂時間軸 / Deadline", value=date.today())
+                
+            # 相依性接續選擇
+            parent_options = {"無前置任務 (獨立事件)": ""}
+            for _, r in df_memo.iterrows():
+                if safe_str(r['title']) and safe_str(r['status']) != "已完成":
+                    parent_options[f"【{r['category']}】{r['title']}"] = str(r['id'])
+                    
+            t_parent = st.selectbox("🔗 前置接續任務 (必須先做完哪一項，才能執行這件事？)", list(parent_options.keys()))
+            
+            submit_task = st.form_submit_input("💾 寫入精密密庫", use_container_width=True)
+            
+            if submit_task and t_title.strip() != "":
+                new_id = str(int(time.time()))
+                max_order = safe_int(df_memo['order_num'].max()) if not df_memo.empty else 0
+                
+                new_row = pd.DataFrame([{
+                    'id': new_id, 'title': t_title, 'detail': t_detail,
+                    'category': t_cat, 'urgency': t_urg, 'importance': t_imp,
+                    'status': "未開始", 'parent_id': parent_options[t_parent],
+                    'order_num': max_order + 1,
+                    'target_date': str(t_date) # 儲存自訂日期字串
+                }])
+                
+                df_memo = pd.concat([df_memo, new_row], ignore_index=True)
+                conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_memo) # 注意：此處依原本工作表名稱寫入
+                st.cache_data.clear()
+                st.success(f"✅ 任務【{t_title}】已排入時間軸序列！")
                 st.rerun()
 
-        tabs = st.tabs(["🎯 任務挑選", "📊 進度追蹤", "🏆 排行榜", "🎰 地下博弈", "⚙️ 帳號設定"])
+    # --- 備忘錄主面板過濾器 ---
+    st.write("### 🔍 觀測視窗篩選")
+    f_cat = st.multiselect("按群組篩選", ["課業修讀", "系學會", "GDGOC CSMU", "私人生活", "其他工作"], default=["課業修讀", "系學會", "GDGOC CSMU", "私人生活", "其他工作"])
+    f_status = st.multiselect("按狀態顯示", ["未開始", "進行中", "已完成"], default=["未開始", "進行中"])
+    
+    if not df_memo.empty:
+        df_display = df_memo[df_memo['category'].isin(f_cat) & df_memo['status'].isin(f_status)].copy()
+        df_display['order_num'] = df_display['order_num'].apply(safe_int)
+        df_display = df_display.sort_values(by='order_num', ascending=True)
+    else:
+        df_display = pd.DataFrame()
 
-        def mark_tuto_step(col):
-            st.session_state.t_done[col] = True
-            df_users[col] = df_users[col].astype(str)
-            df_users.at[u_idx, col] = "1"
+    # --- 任務渲染清單 ---
+    st.write("---")
+    if df_display.empty:
+        st.info("🌟 當前篩選條件下沒有待辦事項。妳的版面很乾淨！")
+    else:
+        for idx_disp, current_task in df_display.iterrows():
+            t_id = str(current_task['id'])
+            p_id = safe_str(current_task['parent_id'])
+            t_date_val = safe_str(current_task['target_date']) if safe_str(current_task['target_date']) != "" else "未設定"
             
-            db_task = 1 if col == 'tuto_task' else safe_int(df_users.at[u_idx, 'tuto_task'])
-            db_prog = 1 if col == 'tuto_prog' else safe_int(df_users.at[u_idx, 'tuto_prog'])
-            db_gamble = 1 if col == 'tuto_gamble' else safe_int(df_users.at[u_idx, 'tuto_gamble'])
-            db_set = 1 if col == 'tuto_set' else safe_int(df_users.at[u_idx, 'tuto_set'])
-            
-            if db_task == 1 and db_prog == 1 and db_gamble == 1 and db_set == 1:
-                if safe_int(df_users.at[u_idx, 'gift_given']) != 1:
-                    df_users['gift_given'] = df_users['gift_given'].astype(str)
-                    df_users['extra_tickets'] = df_users['extra_tickets'].astype(str)
-                    df_users.at[u_idx, 'gift_given'] = "1"
-                    df_users.at[u_idx, 'extra_tickets'] = str(safe_int(df_users.at[u_idx, 'extra_tickets']) + 1)
+            is_blocked = False
+            parent_title = ""
+            if p_id != "":
+                parent_match = df_memo[df_memo['id'].astype(str) == p_id]
+                if not parent_match.empty:
+                    p_status = safe_str(parent_match.iloc[0]['status'])
+                    parent_title = safe_str(parent_match.iloc[0]['title'])
+                    if p_status != "已完成":
+                        is_blocked = True
+
+            with st.container():
+                st.markdown(f'<div class="todo-card">', unsafe_allow_html=True)
+                c_info, c_action = st.columns([4, 1])
                 
-            conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users)
-            st.cache_data.clear()
-            st.rerun()
-
-        if done_count == 4 and safe_str(user.get('gift_given')) == "1" and not st.session_state.p_shown:
-            st.balloons()
-            st.markdown("""
-                <div style="background-color:#FFF9E6; padding:35px; border-radius:20px; text-align:center; border:4px solid #FFC107; box-shadow: 0 10px 30px rgba(0,0,0,0.1); margin-bottom: 25px;">
-                    <h1 style="color:#FFC107; margin:0; font-size: 2.2rem;">🎊 新手特訓合格 🎊</h1>
-                    <p style="font-size:1.2rem; margin-top:12px; color: #5F5F5F; font-weight: bold;">你已完全瀏覽 4 個新手任務，特發放一張抽獎券！</p>
-                    <div style="background:#FFC107; color:white; display:inline-block; padding:8px 25px; border-radius:10px; font-size: 1.4rem; font-weight: bold; margin: 15px 0;">
-                        🎁 獎勵已發放：抽獎券 +1 張
-                    </div>
-                    <p style="color:#8C8C8C; font-size: 0.95rem; margin-top: 5px;">抽獎券已自動存入你的帳號啦～！</p>
-                </div>
-            """, unsafe_allow_html=True)
-            if st.button("進入（點擊解鎖全部功能）", use_container_width=True):
-                st.session_state.p_shown = True; st.rerun()
-            st.stop()
-
-        # --- Tab 1: 任務挑選 ---
-        with tabs[0]:
-            if show_tuto_task: 
-                st.markdown(f'<div class="tutorial-box"><h3>🚀新手指引：操作教學</h3><p>請上傳任意一張圖片測試功能。完成後將解鎖四種難度等級任務，此任務將計入「初階」進度 +1。</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
-                up_n = st.file_uploader("上傳任務照片", type=['png','jpg','jpeg'], key="up_newbie")
-                if up_n and st.button("確認送出，解鎖四種難度等級", use_container_width=True):
-                    is_success = False 
-                    try:
-                        res = cloudinary.uploader.upload(up_n, folder="CSMU_AGENT", transformation=[{'width': 800, 'quality': "auto:eco"}])
-                        df_users['photo_list'] = df_users['photo_list'].astype(str)
-                        df_users['task_list'] = df_users['task_list'].astype(str)
-                        df_users['done_初階'] = df_users['done_初階'].astype(str)
-                        cp = safe_str(user.get("photo_list")); ct = safe_str(user.get("task_list"))
-                        df_users.at[u_idx, "photo_list"] = str(res["secure_url"] if cp == "" else f"{cp},{res['secure_url']}")
-                        df_users.at[u_idx, "task_list"] = str("新手指引：操作教學" if safe_str(user.get("task_list")) == "" else f"{safe_str(user.get('task_list'))},新手指引：操作教學")
-                        df_users.at[u_idx, "done_初階"] = str(safe_int(user.get("done_初階")) + 1)
+                with c_info:
+                    u_class = "badge-high" if current_task['urgency'] == "高" else ("badge-mid" if current_task['urgency'] == "中" else "badge-low")
+                    i_class = "badge-high" if current_task['importance'] == "高" else ("badge-mid" if current_task['importance'] == "中" else "badge-low")
+                    
+                    # 🟢 顯示使用者自定義日期時間軸標籤
+                    st.markdown(f"""
+                        <span class="badge badge-cat">{current_task['category']}</span>
+                        <span class="badge badge-date">📅 時程: {t_date_val}</span>
+                        <span class="badge {u_class}">急迫:{current_task['urgency']}</span>
+                        <span class="badge {i_class}">重要:{current_task['importance']}</span>
+                        <span class="badge" style="background-color:#007BFF;">{current_task['status']}</span>
+                    """, unsafe_allow_html=True)
+                    
+                    if is_blocked:
+                        st.markdown(f"#### 🔒 ~~{current_task['title']}~~ <span style='color:red; font-size:0.85rem;'>[ 順序鎖定中 ]</span>", unsafe_allow_html=True)
+                        st.markdown(f'<p class="dependency-text">⚠️ 必須先完成前置任務：【{parent_title}】才能解鎖此項目執行權限。</p>', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"#### 🔓 {current_task['title']}")
+                        if parent_title:
+                            st.markdown(f'<p class="dependency-text">⛓️ 接續關係：承接在【{parent_title}】之後</p>', unsafe_allow_html=True)
+                    
+                    if safe_str(current_task['detail']):
+                        with st.expander("🔎 檢視精密行動細節說明"):
+                            st.info(current_task['detail'])
+                            
+                with c_action:
+                    current_status = current_task['status']
+                    if current_status == "未開始":
+                        if st.button("▶️ 開始執行", key=f"start_{t_id}", disabled=is_blocked, use_container_width=True):
+                            df_memo.loc[df_memo['id'].astype(str) == t_id, 'status'] = "進行中"
+                            conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_memo); st.cache_data.clear(); st.rerun()
+                    elif current_status == "進行中":
+                        if st.button("✅ 劃記完成", key=f"done_{t_id}", use_container_width=True):
+                            df_memo.loc[df_memo['id'].astype(str) == t_id, 'status'] = "已完成"
+                            conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_memo); st.cache_data.clear(); st.rerun()
+                    
+                    # 排序移位按鈕
+                    cc1, cc2 = st.columns(2)
+                    with cc1:
+                        if st.button("▲", key=f"up_{t_id}", help="將此任務順序上移", use_container_width=True):
+                            curr_idx = df_memo[df_memo['id'].astype(str) == t_id].index[0]
+                            curr_order = safe_int(df_memo.at[curr_idx, 'order_num'])
+                            df_memo.at[curr_idx, 'order_num'] = max(1, curr_order - 1.5)
+                            conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_memo); st.cache_data.clear(); st.rerun()
+                    with cc2:
+                        if st.button("▼", key=f"down_{t_id}", help="將此任務順序下移", use_container_width=True):
+                            curr_idx = df_memo[df_memo['id'].astype(str) == t_id].index[0]
+                            curr_order = safe_int(df_memo.at[curr_idx, 'order_num'])
+                            df_memo.at[curr_idx, 'order_num'] = curr_order + 1.5
+                            conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_memo); st.cache_data.clear(); st.rerun()
+                            
+                    if st.button("🗑️ 拔除任務", key=f"del_{t_id}", use_container_width=True):
+                        df_memo = df_memo[df_memo['id'].astype(str) != t_id]
+                        conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_memo); st.cache_data.clear(); st.rerun()
                         
-                        st.session_state.t_done['tuto_task'] = True
-                        df_users['tuto_task'] = df_users['tuto_task'].astype(str)
-                        df_users.at[u_idx, 'tuto_task'] = "1"
-                        
-                        conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users)
-                        st.cache_data.clear()
-                        is_success = True 
-                    except Exception as e:
-                        st.error(f"上傳失敗，錯誤原因：{e}") 
-                    
-                    if is_success:
-                        st.rerun() 
-            else:
-                st.write("### 📍選擇任務難度")
-                lvl = st.radio("難度分級", ["初階", "中階", "高階", "傳奇"], horizontal=True, label_visibility="collapsed")
-                
-                lvl_map = {"初階": "A", "中階": "B", "高階": "C", "傳奇": "D"}
-                target_letter = lvl_map.get(lvl, "A")
-                
-                filtered = df_tasks[
-                    (df_tasks['difficulty'].astype(str).str.strip().str.upper() == target_letter) |
-                    (df_tasks['difficulty'].astype(str).str.strip() == lvl)
-                ].copy()
-                
-                filtered = filtered[~filtered['title'].astype(str).str.contains("新手|操作教學", na=False, regex=True)]
-                if filtered.empty: 
-                    filtered = df_tasks.copy()
-                    filtered = filtered[~filtered['title'].astype(str).str.contains("新手|操作教學", na=False, regex=True)]
-                
-                current_today_str = str(date.today())
-                if st.session_state.daily_date != current_today_str or st.session_state.daily_seed is None:
-                    st.session_state.daily_date = current_today_str
-                    st.session_state.daily_seed = int(datetime.now().strftime("%Y%m%d"))
-                
-                if len(filtered) > 4:
-                    rng = random.Random(st.session_state.daily_seed + ord(lvl[0]))
-                    display_tasks = filtered.sample(n=4, random_state=rng.randint(0, 10000))
-                else:
-                    display_tasks = filtered
-                
-                st.caption(f"📅 今日「{lvl}」任務清單已刷新，每日會刷新 {len(display_tasks)} 題")
-                
-                for idx, task in display_tasks.iterrows():
-                    with st.container():
-                        st.markdown(f'<div class="mission-card"><b>{task["title"]}</b><br><small>{task["content"]}</small></div>', unsafe_allow_html=True)
-                        with st.expander("📸 執行此任務 (上傳情報)"):
-                            up_task = st.file_uploader("選擇照片", type=['png','jpg','jpeg'], key=f"up_task_{idx}")
-                            if up_task and st.button("確認達成任務", key=f"btn_task_{idx}", use_container_width=True):
-                                is_success = False 
-                                try:
-                                    res = cloudinary.uploader.upload(up_task, folder="CSMU_AGENT", transformation=[{'width': 800, 'quality': "auto:eco"}])
-                                    
-                                    df_users['photo_list'] = df_users['photo_list'].astype(str)
-                                    df_users['task_list'] = df_users['task_list'].astype(str)
-                                    target_done_col = f"done_{lvl}"
-                                    df_users[target_done_col] = df_users[target_done_col].astype(str)
-                                    
-                                    cp = safe_str(user.get("photo_list"))
-                                    ct = safe_str(user.get("task_list"))
-                                    
-                                    df_users.at[u_idx, "photo_list"] = str(res["secure_url"] if cp == "" else f"{cp},{res['secure_url']}")
-                                    df_users.at[u_idx, "task_list"] = str(task["title"] if ct == "" else f"{ct},{task['title']}")
-                                    df_users.at[u_idx, target_done_col] = str(safe_int(user.get(target_done_col)) + 1)
-                                    
-                                    conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users)
-                                    st.cache_data.clear()
-                                    is_success = True 
-                                except Exception as e: 
-                                    st.error(f"上傳失敗，錯誤原因：{e}") 
-                                
-                                if is_success:
-                                    st.toast(f"✅ 【{task['title']}】情報已成功回傳總部！進度 +1")
-                                    st.rerun() 
+                st.markdown('</div>', unsafe_allow_html=True)
 
-        # --- Tab 2: 進度 ---
-        with tabs[1]:
-            if show_tuto_prog: 
-                st.markdown(f'<div class="tutorial-box"><h3>📊 新手指引：操作教學</h3><p>任務數量依照難度而有不同，完成對應數量可獲得抽獎券一張，不限完成次數，可無限次累積完成任務！。</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
-                if st.button("我已閱讀完畢", key="btn_t2", use_container_width=True): mark_tuto_step('tuto_prog')
-            st.subheader("📊 任務進度")
-            bars = [("初階", 4), ("中階", 3), ("高階", 2), ("傳奇", 1)]
-            for title, limit in bars:
-                v = safe_int(user.get(f"done_{title}"))
-                st.write(f"**{title}任務** 進度： {v} / {limit} （每滿 {limit} 個可換 1 張券）")
-                st.progress(min(v / limit, 1.0))
-
-        # --- Tab 3: 🏆 排行榜 ---
-        with tabs[2]:
-            st.write("### 🏆 排行榜")
-            active_u = df_users[df_users['photo_list'].apply(lambda x: safe_str(x) != "")]
-            def get_nick(row):
-                n = safe_str(row.get("Nickname(變更暱稱)", ""))
-                return n if n != "" else f"{str(row['name(姓名)'])[0]}* 同學"
-
-            c1, r1 = st.columns(2)
-            with c1:
-                st.markdown("#### 📸任勞任怨 (完成任務數量)")
-                active_u['total'] = active_u.apply(lambda r: sum(safe_int(r.get(f'done_{l}')) for l in ["初階", "中階", "高階", "傳奇"]), axis=1)
-                for i, (_, r) in enumerate(active_u.sort_values(by='total', ascending=False).head(8).iterrows()):
-                    st.markdown(f'<div class="leaderboard-card"><span class="rank-num">{i+1}</span><span>{get_nick(r)}</span><span>{int(r["total"])} 次</span></div>', unsafe_allow_html=True)
-            with r1:
-                st.markdown("#### 🎰 Let me 賭 it for you (博弈獲得數量)")
-                for i, (_, r) in enumerate(active_u.sort_values(by='gamble_profit', ascending=False).head(8).iterrows()):
-                    st.markdown(f'<div class="leaderboard-card"><span class="rank-num">{i+1}</span><span>{get_nick(r)}</span><span>{int(r["gamble_profit"])} 張</span></div>', unsafe_allow_html=True)
-
-        # --- Tab 4: 地下城 ---
-        with tabs[3]:
-            if show_tuto_gamble: 
-                st.markdown(f'<div class="tutorial-box"><h3>🎰 新手指引：操作教學</h3><p>每次博弈消耗一張，最高可獲得4張，最低則一無所獲。累積 4 次失敗有保底！</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
-                if st.button("我已閱讀完畢", key="btn_t4", use_container_width=True): mark_tuto_step('tuto_gamble')
-            st.markdown('<div class="casino-zone"><h2>🎰 賭賭賭</h2><p>命運的分叉路，翻倍或一無所有。</p></div>', unsafe_allow_html=True)
-            
-            if total_tickets < 1: 
-                st.error("❌ 目前你手上沒有多餘的抽獎券可以下注。快去解任務賺籌碼！")
-            else:
-                if st.button("🧧 消耗 1 張抽獎券下注！", use_container_width=True):
-                    roll = random.random() * 100
-                    gain = -1
-                    if roll < 10: gain += 4; r_t, r_m, r_s = "💎 奇蹟！", "獲得 4 張！", "win"
-                    elif roll < 35: gain += 3; r_t, r_m, r_s = "🔥 大勝！", "獲得 3 張！", "win"
-                    elif roll < 75: gain += 2; r_t, r_m, r_s = "✨ 小贏！", "獲得 2 張！", "win"
-                    elif roll < 85: gain += 1; r_t, r_m, r_s = "⚖️ 不賺不賠", "獲得 1 張。", "draw"
-                    else: gain += 0; r_t, r_m, r_s = "💀 慘賠...", "獎券化為烏有。", "loss"
-                    
-                    df_users['gamble_balance'] = df_users['gamble_balance'].astype(str)
-                    df_users['loss_count'] = df_users['loss_count'].astype(str)
-                    df_users['gamble_count'] = df_users['gamble_count'].astype(str)
-                    df_users['gamble_profit'] = df_users['gamble_profit'].astype(str)
-                    
-                    cl = safe_int(user.get('loss_count'))
-                    nl = cl + 1 if r_s == "loss" else cl
-                    bonus = 0; 
-                    if nl >= 4: bonus = 2; nl = 0; st.toast("🛡️ 運氣差不要緊，給你額外兩張抽獎券！")
-                    
-                    df_users.at[u_idx, "gamble_balance"] = str(safe_int(user.get('gamble_balance')) + gain + bonus)
-                    df_users.at[u_idx, "loss_count"] = str(nl)
-                    df_users.at[u_idx, "gamble_count"] = str(safe_int(user.get('gamble_count')) + 1)
-                    df_users.at[u_idx, "gamble_profit"] = str(safe_int(user.get('gamble_profit')) + gain)
-                    
-                    conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users)
-                    st.session_state.g_res = {"t": r_t, "m": r_m, "s": r_s}
-                    st.cache_data.clear(); st.rerun()
-
-            if st.session_state.g_res:
-                res = st.session_state.g_res
-                if res['s'] == "win": st.balloons(); st.markdown(f'<div class="win-card"><h2>{res["t"]}</h2><p>{res["m"]}</p></div>', unsafe_allow_html=True)
-                elif res['s'] == "draw": st.info(res['m'])
-                else: st.error(res['m'])
-                if st.button("關閉"): st.session_state.g_res = None; st.rerun()
-
-        # --- Tab 5: 設定 ---
-        with tabs[4]:
-            if show_tuto_set: 
-                st.markdown(f'<div class="tutorial-box"><h3>⚙️ 新手指引：操作教學</h3><p>可在此修改帳號名稱，後續他人僅可見你的暱稱。</p><div class="tutorial-footer"><span class="t-badge">教學進度 {done_count}/4</span></div></div>', unsafe_allow_html=True)
-                if st.button("我已了解設定功能", key="btn_t3", use_container_width=True): mark_tuto_step('tuto_set')
-            st.subheader("⚙️ 帳號設定")
-            nn = st.text_input("變更暱稱", value=safe_str(user.get("Nickname(變更暱稱)")))
-            np = st.text_input("自訂密碼", type="password", placeholder="留空不修改")
-            if st.button("💾 更新資料"):
-                df_users['Nickname(變更暱稱)'] = df_users['Nickname(變更暱稱)'].astype(str)
-                df_users['password(自訂密碼)'] = df_users['password(自訂密碼)'].astype(str)
-                df_users.at[u_idx, "Nickname(變更暱稱)"] = str(nn)
-                if np.strip() != "": df_users.at[u_idx, "password(自訂密碼)"] = str(np)
-                
-                conn.update(spreadsheet=GSHEET_URL, worksheet="user", data=df_users)
-                st.cache_data.clear() # 🟢 [核心修復] 修改暱稱成功時，立即洗滌全站快取記憶！
-                st.success("修改成功")
-                st.rerun() # 🟢 [核心修復] 強制網頁重整，讓全域變數與登入端同步最新暱稱！
-
-else: st.error("❌ 連線失敗")
+else:
+    st.error("❌ 無法讀取密庫，請檢查 Google Sheets 連線與分頁名稱是否正確。")
